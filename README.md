@@ -1,5 +1,37 @@
 # Fraunhofer Versatile Video Encoder (VVenC)
 
+
+
+
+Partition Extraction:
+
+For extracting partitions:  
+
+1. Use cmd line as: ./vvencFFapp --InputFile path_to_yuv -s 1920x1080  -fr 60 -f 64 -q 22 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b path_to_bin  --TraceFile="name_or_path_of_trace.csv"  --TraceRule="D_PART_STAT:poc>=0"  > path_to_output_txt.txt
+
+2. Normally we will get two csv files for each encoding CTU_xxx.csv and trace_xxx.csv.
+
+3. Put all the csv files of sequences of same resolution under a directory and then call the python script csv_process.py as follow: csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files>
+   where the -f option indicate the total number of frames encoded of frames and -p represent the path of generated partition python files (not given then generated in the same place as trace files)
+
+4. Then we will get 4 python numpy arrays: ctu.npy, qt_map.npy, mt1_map.npy and mt2_map.npy (The max depth of mt split is equal to 2 for VVenc so two mt split maps would be enough)
+
+ctu.npy: 	store the pixels for all ctus in shape (x, 128, 128, 1)
+qt_map.npy:	store the qtmaps for all ctus in shape (x, 8, 8, 1) => The value of each element of qtmap is the depth QT for 16x16 region in CTU knowing that its value ranges from 1 to 4 for VVenc intra config
+
+mt1_map.npy:	store the mtmaps for all ctus in shape (x, 32, 32, 1) => The value of each element mtmap represents the split type of each 4x4 region at mt depth 1: 
+mt2_map.npy: 	..................................................................................................................................... at mt depth 2:
+
+              
+split types: 0 => Not split, 2 => Binary Horzontal Split, 3 => Binary Vertical Split, 4 => Tenary Horizontal Split, 5 => Tenary Vertical Split
+
+
+
+
+
+
+
+
 The Fraunhofer Versatile Video Encoder (VVenC) is a fast and efficient H.266/VVC encoder implementation with the following main features:
 - Easy to use encoder implementation with five predefined quality/speed presets;
 - Perceptual optimization to improve subjective video quality, based on the XPSNR visual model;
