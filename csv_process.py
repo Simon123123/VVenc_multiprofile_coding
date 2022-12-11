@@ -49,10 +49,16 @@ def main(argv):
         for filename in [f for f in filenames if f.startswith("trace_")]:
             list_files_trace.append(os.path.join(dirpath, filename))
 
-    ind_global = 0
+    ind_global_trace = 0
+    
+    ind_global_ctu = 0
 
 
     print("allocating mem for maps....")
+
+    ctu = np.empty((size_npy, 128, 128, 1), dtype=np.float16)
+    
+    ctu.fill(-1)
 
     qt_map = np.empty((size_npy, 8, 8, 1), dtype=np.int8)
 
@@ -110,25 +116,40 @@ def main(argv):
 
             for i in range(dx_qt):
                 for j in range(dy_qt):
-                    assert (qt_map[ind_global, ref_y_qt + j, ref_x_qt + i, :] == -1 or qt_map[ind_global, ref_y_qt + j, ref_x_qt + i, :] == r[6]), "The qt size is not coherent"
-                    qt_map[ind_global, ref_y_qt + j, ref_x_qt + i, :] = r[6] 
+                    assert (qt_map[ind_global_trace, ref_y_qt + j, ref_x_qt + i, :] == -1 or qt_map[ind_global_trace, ref_y_qt + j, ref_x_qt + i, :] == r[6]), "The qt size is not coherent"
+                    qt_map[ind_global_trace, ref_y_qt + j, ref_x_qt + i, :] = r[6] 
             
             
             for i in range(dx_mt):
                 for j in range(dy_mt):
-                    assert (mt1_map[ind_global, ref_y_mt + j, ref_x_mt + i, :] == -1), "The mt1 decision is not coherent"
-                    assert (mt2_map[ind_global, ref_y_mt + j, ref_x_mt + i, :] == -1), "The mt2 decision is not coherent"
+                    assert (mt1_map[ind_global_trace, ref_y_mt + j, ref_x_mt + i, :] == -1), "The mt1 decision is not coherent"
+                    assert (mt2_map[ind_global_trace, ref_y_mt + j, ref_x_mt + i, :] == -1), "The mt2 decision is not coherent"
 
-                    mt1_map[ind_global, ref_y_mt + j, ref_x_mt + i, :] = mt1_split
-                    mt2_map[ind_global, ref_y_mt + j, ref_x_mt + i, :] = mt2_split
+                    mt1_map[ind_global_trace, ref_y_mt + j, ref_x_mt + i, :] = mt1_split
+                    mt2_map[ind_global_trace, ref_y_mt + j, ref_x_mt + i, :] = mt2_split
 
 
             if (r[1] + r[3]) % 128 == 0 and (r[2] + r[4]) % 128 == 0:
                 
-                if (ind_global % int(1e5) == 0):
-                    print("Treating line:", ind_global)                
+                if (ind_global_trace % int(1e5) == 0):
+                    print("Treating partition maps on line :", ind_global_trace)                
                 
-                ind_global += 1
+                ind_global_trace += 1
+
+
+    for f in list_files_ctu:
+    
+        ctu_file = pd.read_csv(f, delimiter=';', header = None, keep_default_na=False).to_numpy()
+
+        for r in ctu_file: 
+            
+            assert (ctu[ind_global_ctu, 0, 0, 0] == -1), "The ctu value is not coherent"
+            ctu[ind_global_ctu, :, :, :] = np.array(r[3:-1].reshape(128, 128, 1)/1024, dtype = np.float16)
+            
+            ind_global_ctu += 1
+
+
+    np.save( os.path.join(path, 'ctu.npy'), ctu)
 
     np.save( os.path.join(path, 'qt_map.npy'), qt_map)
 
@@ -137,10 +158,16 @@ def main(argv):
     np.save( os.path.join(path, 'mt2_map.npy'), mt2_map)
 
 
-    print("Number of extracted CTUs is : ", ind_global)
+    print("Number of extracted CTUs is : ", ind_global_trace)
 
-    assert (ind_global == size_npy), "The number of extracted CTU samples is not coherent with the number of input frames"
+    assert (ind_global_trace == size_npy), "The number of extracted partition samples is not coherent with the number of input frames"
 
+    assert (ind_global_ctu == size_npy), "The number of extracted CTU samples is not coherent with the number of input frames"
+
+
+
+    if -1 in ctu:
+        raise Exception('-1 value is in CTU pixels')
 
     if -1 in qt_map:
         raise Exception('-1 value is in QTdepth map')
