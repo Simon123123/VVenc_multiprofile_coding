@@ -3,7 +3,7 @@
 
 
 
-Partition Extraction:
+## Partition Extraction:
 
 For extracting partitions:  
 
@@ -16,7 +16,7 @@ For extracting partitions:
 
 4. Then we will get 4 python numpy arrays: ctu.npy, qt_map.npy, mt1_map.npy and mt2_map.npy (The max depth of mt split is equal to 2 for VVenc so two mt split maps would be enough)
 
-ctu.npy: 	store the pixels for all ctus in shape (x, 128, 128, 1)
+ctu.npy: 	store the pixels for all ctus in shape (x, 128, 128, 1): Pixel values scaled by 1024
 qt_map.npy:	store the qtmaps for all ctus in shape (x, 8, 8, 1) => The value of each element of qtmap is the depth QT for 16x16 region in CTU knowing that its value ranges from 1 to 4 for VVenc intra config
 
 mt1_map.npy:	store the mtmaps for all ctus in shape (x, 32, 32, 1) => The value of each element mtmap represents the split type of each 4x4 region at mt depth 1: 
