@@ -108,6 +108,9 @@ class CDTrace
 private:
     bool          copy;
     FILE         *m_trace_file;
+#if VVENC_STAT
+    FILE         *m_trace_file_ctu;
+#endif
     int           m_error_code;
 
     typedef std::string Key;
@@ -130,7 +133,10 @@ public:
     int  addRule      ( std::string rulestring );
     template<bool bCount>
     void dtrace       ( int, const char *format, /*va_list args*/... );
-    void dtrace_repeat( int, int i_times, const char *format, /*va_list args*/... );
+#if VVENC_STAT
+	void dtrace_ctu(int poc, int posx, int posy, int stride, const int16_t* buf);
+#endif
+	void dtrace_repeat( int, int i_times, const char *format, /*va_list args*/... );
     bool update       ( state_type stateval );
     int  init( vstring channel_names );
     int  getLastError() { return m_error_code;  }

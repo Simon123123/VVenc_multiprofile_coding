@@ -528,13 +528,26 @@ void CABACWriter::coding_tree(const CodingStructure& cs, Partitioner& partitione
 
   if( cu.chType == CH_C )
   {
-    DTRACE_COND( (isEncoding()), g_trace_ctx, D_QP, "[chroma CU]x=%d, y=%d, w=%d, h=%d, qp=%d\n", cu.Cb().x, cu.Cb().y, cu.Cb().width, cu.Cb().height, cu.qp );
+    DTRACE_COND( (isEncoding()), g_trace_ctx, D_QP, "[chroma CU]poc=%d, x=%d, y=%d, w=%d, h=%d, qp=%d\n", cu.slice->poc, cu.Cb().x, cu.Cb().y, cu.Cb().width, cu.Cb().height, cu.qp );
   }
   else
   {
-    DTRACE_COND( ( isEncoding() ), g_trace_ctx, D_QP, "x=%d, y=%d, w=%d, h=%d, qp=%d\n", cu.Y().x, cu.Y().y, cu.Y().width, cu.Y().height, cu.qp );
+   DTRACE_COND( (isEncoding()), g_trace_ctx, D_QP, "poc=%d, x=%d, y=%d, w=%d, h=%d, qp=%d\n", cu.slice->poc, cu.Cb().x, cu.Cb().y, cu.Cb().width, cu.Cb().height, cu.qp );
   }
-  DTRACE_BLOCK_REC_COND( ( !isEncoding() ), cs.picture->getRecoBuf( cu ), cu, cu.predMode );
+
+#if VVENC_STAT
+
+  if( cu.chType == CH_L )
+    DTRACE_COND( ( isEncoding() ), g_trace_ctx, D_PART_STAT, "%d;%d;%d;%d;%d;%d;%d;%d\n", cu.slice->poc, cu.Y().x, cu.Y().y, cu.Y().width, cu.Y().height, cu.splitSeries, cu.qtDepth, cu.qp );
+
+ if(isEncoding() && cu.chType == CH_L && cu.Y().x % 128 == 0 && cu.Y().y % 128 == 0 && (cu.Y().x + 128) <= cs.picture->lwidth() && (cu.Y().y + 128) <= cs.picture->lheight()){
+	 g_trace_ctx->dtrace_ctu(cu.slice->poc, cu.Y().x, cu.Y().y, cs.picture->lwidth(), cs.picture->getOrigBuf( cu ).Y().buf);
+ }
+
+#endif
+
+   DTRACE_BLOCK_REC_COND( ( !isEncoding() ), cs.picture->getRecoBuf( cu ), cu, cu.predMode );
+	 
 }
 
 

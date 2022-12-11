@@ -85,7 +85,8 @@ TProfiler* timeProfilerCreate( const vvenc_config& encCfg )
   int   heightInCTU = ( encCfg.m_PadSourceHeight % encCfg.m_CTUSize ) ? encCfg.m_PadSourceHeight/encCfg.m_CTUSize + 1 : encCfg.m_PadSourceHeight/encCfg.m_CTUSize;
   tp = new TProfiler( widthInCTU, heightInCTU, 2, 1, profilerId );
 #elif ENABLE_TIME_PROFILING_CU_SHAPES
-  tp = new TProfiler( Log2(encCfg.m_CTUSize) + 1, Log2(encCfg.m_CTUSize) + 1, 2, 1, profilerId );
+  //tp = new TProfiler( Log2(encCfg.m_CTUSize) + 1, Log2(encCfg.m_CTUSize) + 1, 2, 1, profilerId );
+  tp = new TProfiler( Log2(encCfg.m_CTUSize) + 1, Log2(encCfg.m_CTUSize) + 1, 2, profilerId );
 #endif
   profilerId++;
 #endif

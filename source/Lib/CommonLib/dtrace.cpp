@@ -131,8 +131,35 @@ CDTrace::CDTrace( const char *filename, vstring channel_names )
 CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
   : copy( false ), m_trace_file( NULL ), m_error_code( 0 )
 {
-  if( filename )
+
+#if VVENC_STAT
+
+  if( filename ){
+	std::string name_file = filename;
+	std::string name_ctu, name_trace;
+	std::string path = "/";
+#ifdef _WIN32
+	path = "/\\";
+#endif
+	if (name_file.find_last_of(path) == -1){
+		name_ctu =  "CTU_" + name_file;
+		name_trace = "trace_" + name_file;
+	}else{
+		name_ctu = name_file.substr(0, name_file.find_last_of(path) + 1) + "CTU_" + name_file.substr(name_file.find_last_of(path) + 1);	
+		name_trace = name_file.substr(0, name_file.find_last_of(path) + 1) + "trace_" + name_file.substr(name_file.find_last_of(path) + 1);	
+	}
+	m_trace_file = fopen( name_trace.c_str(), "w" );
+	m_trace_file_ctu = fopen(name_ctu.c_str(), "w");
+
+  }
+
+#else
+
+    if( filename )
     m_trace_file = fopen( filename, "w" );
+
+#endif
+
 
   //int i = 0;
   for( dtrace_channels_t::const_iterator ci = channels.begin(); ci != channels.end(); ++ci ) {
@@ -145,6 +172,9 @@ CDTrace::CDTrace( const CDTrace& other )
 {
     copy = true;
     m_trace_file         = other.m_trace_file;
+#if VVENC_STAT
+	m_trace_file_ctu	 = other.m_trace_file_ctu;
+#endif
     chanRules            = other.chanRules;
     condition_types      = other.condition_types;
     state                = other.state;
@@ -169,6 +199,9 @@ void CDTrace::swap( CDTrace& other )
     CDTrace& second = other;
     swap(first.copy,second.copy);
     swap(first.m_trace_file,second.m_trace_file);
+#if VVENC_STAT
+	swap(first.m_trace_file_ctu,second.m_trace_file_ctu);
+#endif
     swap(first.chanRules,second.chanRules);
     swap(first.condition_types,second.condition_types);
     swap(first.state,second.state);
@@ -186,6 +219,10 @@ CDTrace::~CDTrace()
 {
     if( !copy && m_trace_file )
         fclose( m_trace_file );
+#if VVENC_STAT
+    if( !copy && m_trace_file_ctu )
+        fclose( m_trace_file_ctu );
+#endif
 }
 
 bool _cf_eq ( int bound, int val ) { return ( val==bound ); }
@@ -312,6 +349,24 @@ void CDTrace::dtrace( int k, const char *format, /*va_list args*/... )
   }
   return;
 }
+
+#if VVENC_STAT
+
+void CDTrace::dtrace_ctu(int poc, int posx, int posy, int stride, const int16_t* buf){
+	
+	if (chanRules[D_PART_STAT].active()){
+		fprintf(m_trace_file_ctu, "%d;%d;%d;", poc, posx, posy);
+
+		for(int y = 0; y < 128; y++){
+			for (int x = 0; x < 128; x++){
+				fprintf ( m_trace_file_ctu, "%d;", *(buf + y*stride + x));
+			}
+		}
+		fprintf(m_trace_file_ctu, "\n");
+	}
+}
+
+#endif
 
 template void CDTrace::dtrace<true>( int k, const char *format, /*va_list args*/... );
 template void CDTrace::dtrace<false>( int k, const char *format, /*va_list args*/... );
