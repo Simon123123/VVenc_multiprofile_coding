@@ -17,7 +17,7 @@ def main(argv):
     num_f = 1
     path = '.'
     try:
-        opts, args = getopt.getopt(argv,"w:h:f:p")
+        opts, args = getopt.getopt(argv,"w:h:f:p:")
     except getopt.GetoptError:
         print ('csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files>')
         sys.exit(2)
