@@ -136,20 +136,29 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
 
   if( filename ){
 	std::string name_file = filename;
-	std::string name_ctu, name_trace;
+#if VVENC_CTU
+	std::string name_ctu;
+#endif
+	std::string name_trace;
 	std::string path = "/";
 #ifdef _WIN32
 	path = "/\\";
 #endif
 	if (name_file.find_last_of(path) == -1){
+#if VVENC_CTU
 		name_ctu =  "CTU_" + name_file;
+#endif
 		name_trace = "trace_" + name_file;
 	}else{
+#if VVENC_CTU
 		name_ctu = name_file.substr(0, name_file.find_last_of(path) + 1) + "CTU_" + name_file.substr(name_file.find_last_of(path) + 1);	
+#endif
 		name_trace = name_file.substr(0, name_file.find_last_of(path) + 1) + "trace_" + name_file.substr(name_file.find_last_of(path) + 1);	
 	}
 	m_trace_file = fopen( name_trace.c_str(), "w" );
+#if VVENC_CTU
 	m_trace_file_ctu = fopen(name_ctu.c_str(), "w");
+#endif
 
   }
 
@@ -172,7 +181,7 @@ CDTrace::CDTrace( const CDTrace& other )
 {
     copy = true;
     m_trace_file         = other.m_trace_file;
-#if VVENC_STAT
+#if VVENC_STAT && VVENC_CTU
 	m_trace_file_ctu	 = other.m_trace_file_ctu;
 #endif
     chanRules            = other.chanRules;
@@ -199,7 +208,7 @@ void CDTrace::swap( CDTrace& other )
     CDTrace& second = other;
     swap(first.copy,second.copy);
     swap(first.m_trace_file,second.m_trace_file);
-#if VVENC_STAT
+#if VVENC_STAT && VVENC_CTU
 	swap(first.m_trace_file_ctu,second.m_trace_file_ctu);
 #endif
     swap(first.chanRules,second.chanRules);
@@ -219,7 +228,7 @@ CDTrace::~CDTrace()
 {
     if( !copy && m_trace_file )
         fclose( m_trace_file );
-#if VVENC_STAT
+#if VVENC_STAT && VVENC_CTU
     if( !copy && m_trace_file_ctu )
         fclose( m_trace_file_ctu );
 #endif
@@ -350,7 +359,7 @@ void CDTrace::dtrace( int k, const char *format, /*va_list args*/... )
   return;
 }
 
-#if VVENC_STAT
+#if VVENC_STAT && VVENC_CTU
 
 void CDTrace::dtrace_ctu(int poc, int posx, int posy, int stride, const int16_t* buf){
 	

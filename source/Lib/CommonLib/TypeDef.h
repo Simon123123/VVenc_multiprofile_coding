@@ -88,6 +88,10 @@ namespace vvenc {
 
 #define VVENC_STAT										  1
 
+#if VVENC_STAT
+#define VVENC_CTU										  0 
+#endif
+
 
 #ifndef ENABLE_TRACING
 #define ENABLE_TRACING                                    1 // DISABLED by default (enable only when debugging, requires additional runtime)

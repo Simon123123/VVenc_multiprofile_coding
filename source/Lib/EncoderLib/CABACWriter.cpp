@@ -538,12 +538,12 @@ void CABACWriter::coding_tree(const CodingStructure& cs, Partitioner& partitione
 #if VVENC_STAT
 
   if( cu.chType == CH_L )
-    DTRACE_COND( ( isEncoding() ), g_trace_ctx, D_PART_STAT, "%d;%d;%d;%d;%d;%d;%d;%d\n", cu.slice->poc, cu.Y().x, cu.Y().y, cu.Y().width, cu.Y().height, cu.splitSeries, cu.qtDepth, cu.qp );
-
+    DTRACE_COND( ( isEncoding() ), g_trace_ctx, D_PART_STAT, "%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;%d\n", cu.slice->poc, cu.Y().x, cu.Y().y, cu.Y().width, cu.Y().height, cu.splitSeries, cu.depth, cu.qtDepth, cu.mtDepth, cu.btDepth, cu.qp );
+#if VVENC_CTU
  if(isEncoding() && cu.chType == CH_L && cu.Y().x % 128 == 0 && cu.Y().y % 128 == 0 && (cu.Y().x + 128) <= cs.picture->lwidth() && (cu.Y().y + 128) <= cs.picture->lheight()){
 	 g_trace_ctx->dtrace_ctu(cu.slice->poc, cu.Y().x, cu.Y().y, cs.picture->lwidth(), cs.picture->getOrigBuf( cu ).Y().buf);
  }
-
+#endif
 #endif
 
    DTRACE_BLOCK_REC_COND( ( !isEncoding() ), cs.picture->getRecoBuf( cu ), cu, cu.predMode );
