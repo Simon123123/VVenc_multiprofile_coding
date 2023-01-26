@@ -49,48 +49,49 @@ def main(argv):
         for filename in [f for f in filenames if f.startswith("trace_")]:
             list_files_trace.append(os.path.join(dirpath, filename))
 
-    ind_global_trace = 0
-    
-    # ind_global_ctu = 0
-
-
-    print("allocating mem for maps....")
-
-    # ctu = np.empty((size_npy, 128, 128, 1), dtype=np.float16)
-    
-    # ctu.fill(-1)
-
-    qt_map = np.empty((size_npy, 8, 8, 1), dtype=np.int8)
-
-    qt_map.fill(-1)
-
-
-
-
-    mtdepth_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
-
-    mtdepth_map.fill(-1)
-
-    btdepth_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
-
-    btdepth_map.fill(-1)
-
-    cushape_map = np.empty((size_npy, 32, 32, 2), dtype=np.int8)
-
-    cushape_map.fill(-1)
-
-
-    # mt1_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
-
-    # mt1_map.fill(-1)
-
-    # mt2_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
-
-    # mt2_map.fill(-1)
-
 
 
     for f in list_files_trace:
+        
+        
+        ind_global_trace = 0
+        
+        # ind_global_ctu = 0
+    
+        filename = f.split('\\')[-1].split('.')[0]
+    
+        print("treating maps of seq {}....".format(filename))
+    
+        # ctu = np.empty((size_npy, 128, 128, 1), dtype=np.float16)
+        
+        # ctu.fill(-1)
+    
+        qt_map = np.empty((size_npy, 8, 8, 1), dtype=np.int8)
+    
+        qt_map.fill(-1)
+    
+        mtdepth_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
+    
+        mtdepth_map.fill(-1)
+    
+        btdepth_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
+    
+        btdepth_map.fill(-1)
+    
+        cushape_map = np.empty((size_npy, 32, 32, 2), dtype=np.int8)
+    
+        cushape_map.fill(-1)
+    
+    
+        # mt1_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
+    
+        # mt1_map.fill(-1)
+    
+        # mt2_map = np.empty((size_npy, 32, 32, 1), dtype=np.int8)
+    
+        # mt2_map.fill(-1)        
+        
+        
         
         trace =  pd.read_csv(f, delimiter=';', header = None, keep_default_na=False).to_numpy()
 
@@ -160,11 +161,12 @@ def main(argv):
 
 
             if (r[1] + r[3]) % 128 == 0 and (r[2] + r[4]) % 128 == 0:
+
+                ind_global_trace += 1                
+                # if (ind_global_trace % int(1e5) == 0):
+                #     print("Treating partition maps on line :", ind_global_trace)                
                 
-                if (ind_global_trace % int(1e5) == 0):
-                    print("Treating partition maps on line :", ind_global_trace)                
-                
-                ind_global_trace += 1
+
 
 
     # for f in list_files_ctu:
@@ -189,48 +191,48 @@ def main(argv):
     
     
 
-    np.save( os.path.join(path, 'qt_map.npy'), qt_map)
-
-    np.save( os.path.join(path, 'mtdepth_map.npy'), mtdepth_map)
-
-    np.save( os.path.join(path, 'btdepth_map.npy'), btdepth_map)    
+        np.save( os.path.join(path, 'qt_map_{}.npy'.format(filename)), qt_map)
     
-    np.save( os.path.join(path, 'cushape_map.npy'), cushape_map)        
+        np.save( os.path.join(path, 'mtdepth_map_{}.npy'.format(filename)), mtdepth_map)
     
-
-
-    print("Number of extracted CTUs is : ", ind_global_trace)
-
-    assert (ind_global_trace == size_npy), "The number of extracted partition samples is not coherent with the number of input frames"
-
-    # assert (ind_global_ctu == size_npy), "The number of extracted CTU samples is not coherent with the number of input frames"
-
-
-
-    # if -1 in ctu:
-    #     raise Exception('-1 value is in CTU pixels')
-
-    # if -1 in qt_map:
-    #     raise Exception('-1 value is in QTdepth map')
-
-    # if -1 in mt1_map:
-    #     raise Exception('-1 value is in mt1 map')
-
-    # if -1 in mt2_map:
-    #     raise Exception('-1 value is in mt2 map')
-
-
-    if -1 in qt_map:
-        raise Exception('-1 value is in QTdepth map')
-
-    if -1 in mtdepth_map:
-        raise Exception('-1 value is in mtdepth map')
-
-    if -1 in btdepth_map:
-        raise Exception('-1 value is in btdepth map')
-
-    if -1 in cushape_map:
-        raise Exception('-1 value is in cushape map')
+        np.save( os.path.join(path, 'btdepth_map_{}.npy'.format(filename)), btdepth_map)    
+        
+        np.save( os.path.join(path, 'cushape_map_{}.npy'.format(filename)), cushape_map)        
+        
+    
+    
+        print("Number of extracted CTUs is : ", ind_global_trace)
+    
+        assert (ind_global_trace == size_npy), "The number of extracted partition samples is not coherent with the number of input frames"
+    
+        # assert (ind_global_ctu == size_npy), "The number of extracted CTU samples is not coherent with the number of input frames"
+    
+    
+    
+        # if -1 in ctu:
+        #     raise Exception('-1 value is in CTU pixels')
+    
+        # if -1 in qt_map:
+        #     raise Exception('-1 value is in QTdepth map')
+    
+        # if -1 in mt1_map:
+        #     raise Exception('-1 value is in mt1 map')
+    
+        # if -1 in mt2_map:
+        #     raise Exception('-1 value is in mt2 map')
+    
+    
+        if -1 in qt_map:
+            raise Exception('-1 value is in QTdepth map')
+    
+        if -1 in mtdepth_map:
+            raise Exception('-1 value is in mtdepth map')
+    
+        if -1 in btdepth_map:
+            raise Exception('-1 value is in btdepth map')
+    
+        if -1 in cushape_map:
+            raise Exception('-1 value is in cushape map')
 
 
 
