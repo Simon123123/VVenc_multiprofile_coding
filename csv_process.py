@@ -58,7 +58,7 @@ def main(argv):
         
         # ind_global_ctu = 0
     
-        filename = f.split('\\')[-1].split('.')[0]
+        filename = f.split(os.sep)[-1].split('.')[0]
     
         print("treating maps of seq {}....".format(filename))
     
@@ -91,7 +91,7 @@ def main(argv):
     
         # mt2_map.fill(-1)        
         
-        
+        print(os.path.join(os.path.dirname(filename), 'qt_map_{}.npy'.format(filename)))        
         
         trace =  pd.read_csv(f, delimiter=';', header = None, keep_default_na=False).to_numpy()
 
@@ -191,13 +191,13 @@ def main(argv):
     
     
 
-        np.save( os.path.join(path, 'qt_map_{}.npy'.format(filename)), qt_map)
+        np.save( os.path.join(os.path.dirname(f), 'qt_map_{}.npy'.format(filename)), qt_map)
     
-        np.save( os.path.join(path, 'mtdepth_map_{}.npy'.format(filename)), mtdepth_map)
+        np.save( os.path.join(os.path.dirname(f), 'mtdepth_map_{}.npy'.format(filename)), mtdepth_map)
     
-        np.save( os.path.join(path, 'btdepth_map_{}.npy'.format(filename)), btdepth_map)    
+        np.save( os.path.join(os.path.dirname(f), 'btdepth_map_{}.npy'.format(filename)), btdepth_map)    
         
-        np.save( os.path.join(path, 'cushape_map_{}.npy'.format(filename)), cushape_map)        
+        np.save( os.path.join(os.path.dirname(f), 'cushape_map_{}.npy'.format(filename)), cushape_map)        
         
     
     
