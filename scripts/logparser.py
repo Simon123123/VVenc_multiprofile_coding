@@ -16,7 +16,7 @@ def main():
     log_path = os.path.join(args.path, args.log)
     check_log(log_path)
 
-    data = np.loadtxt(log_path, delimiter=',').astype(np.int32)
+    data = np.loadtxt(log_path, delimiter=';').astype(np.int32)
 
     # Parameters
     poc = 0
