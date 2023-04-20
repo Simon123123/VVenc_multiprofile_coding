@@ -326,9 +326,9 @@ CodingUnit& CodingStructure::addCU( const UnitArea& unit, const ChannelType chTy
     const Area scaledSelf  = scale.scale( _selfBlk );
     const Area scaledBlk   = scale.scale(     _blk );
     CodingUnit **cuPtr     = m_cuPtr[i] + rsAddr( scaledBlk.pos(), scaledSelf.pos(), scaledSelf.width );
-
+#if !VVENC_ORACLE
     CHECKD( *cuPtr, "Overwriting a pre-existing value, should be '0'!" );
-
+#endif
     g_pelBufOP.fillPtrMap( ( void** ) cuPtr, scaledSelf.width, scaledBlk.width, scaledBlk.height, ( void* ) cu );
   }
 

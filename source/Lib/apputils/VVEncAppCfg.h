@@ -66,6 +66,17 @@ POSSIBILITY OF SUCH DAMAGE.
 #define MACRO_TO_STRING_HELPER(val) #val
 #define MACRO_TO_STRING(val) MACRO_TO_STRING_HELPER(val)
 
+
+#ifndef VVENC_ORACLE
+#define VVENC_ORACLE              1
+#endif
+
+#if VVENC_ORACLE
+#include "CommonLib/CommonDef.h"
+//para_metrics p_m;
+#endif
+
+
 using namespace std;
 namespace po = apputils::program_options;
 
@@ -400,6 +411,8 @@ public:
   std::string  m_bitstreamFileName;                            ///< output bitstream file
   std::string  m_reconFileName;                                ///< output reconstruction file
   std::string  m_RCStatsFileName;                              ///< rate control statistics file
+  
+
   vvencChromaFormat m_inputFileChromaFormat    = VVENC_CHROMA_420;
   int          m_FrameSkip                     = 0;            ///< number of skipped frames from the beginning
   bool         m_bClipInputVideoToRec709Range  = false;
@@ -659,7 +672,7 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
   ("Profile",                                           toProfile,                                           "select profile (main_10, main_10_still_picture)")
   ("Level",                                             toLevel,                                             "Level limit (1.0, 2.0,2.1, 3.0,3.1, 4.0,4.1, 5.0,5.1,5.2, 6.0,6.1,6.2,6.3, 15.5)")
   ("Tier",                                              toLevelTier,                                         "Tier to use for interpretation of level (main or high)")
-  ;
+	;
 
   if( m_easyMode )
   {
@@ -736,7 +749,7 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
     ("VerticalPadding",                                 c->m_aiPad[1],                                       "Vertical source padding for conformance window mode 2")
     ("InputChromaFormat",                               toInputFileChromaFormat,                             "input file chroma format (400, 420, 422, 444)")
     ("PackedInput",                                     m_packedYUVInput,                                    "Enable 10-bit packed YUV input data ( pack 4 samples( 8-byte) into 5-bytes consecutively.")
-    ;
+	;
 
     opts.setSubSection("Profile, Level, Tier");
     opts.addOptions()
@@ -1106,6 +1119,12 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
     ("tracechannellist",              c->m_listTracingChannels,  "List all available tracing channels")
     ("tracerule",                     toTraceRule,               "Tracing rule (ex: \"D_CABAC:poc==8\" or \"D_REC_CB_LUMA:poc==8\")")
     ("tracefile",                     toTraceFile,               "Tracing file")
+#if VVENC_ORACLE
+	("metric",                                           p_m.metric,                                          "Set metric for oracle mode, currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d")
+	("metricscale",                                      p_m.metric_scale,                                     "Set metric scale for oracle mode by pixels, should be multiple of 8")
+	("metricpath",                                       p_m.metric_path,                                      "Set the path of metric csv files")
+	("metricqp",                                         p_m.metric_qp,                                        "Set the qp metric map")
+#endif
     ;
   }
 
@@ -1200,7 +1219,19 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
     {
       err.warn( "Input file" ) << cErr;
     }
-
+#if VVENC_ORACLE
+	p_m.inp_f = m_inputFileName;
+	if (p_m.metric != "max_size_map_1d" && p_m.metric != "max_size_map_2d" && p_m.metric != "min_size_map_1d" && p_m.metric != "min_size_map_2d"){
+		err.error( "Oracle metric" ) << "Currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d! \n";
+	}
+	if (p_m.metric_scale % 8 != 0 && p_m.metric_scale != 4){
+		err.error( "Oracle metric scale" ) << "Should be multiple of 8! \n";
+	}
+    if( p_m.metric_path.empty() )
+    {
+      err.error( "Metric oracle path" ) << "Should not be void! \n";
+    }
+#endif
     if( !m_bitstreamFileName.empty() && !apputils::FileIOHelper::checkBitstreamFile( m_bitstreamFileName, cErr ) )
     {
       err.warn( "Bitstream file" ) << cErr;

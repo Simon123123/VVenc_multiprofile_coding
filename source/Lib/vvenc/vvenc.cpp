@@ -183,8 +183,7 @@ VVENC_DECL vvencEncoder* vvenc_encoder_create()
   return (vvencEncoder*)encCtx;
 }
 
-
-VVENC_DECL int vvenc_encoder_open( vvencEncoder *enc, vvenc_config* config )
+VVENC_DECL int vvenc_encoder_open( vvencEncoder *enc, vvenc_config* config)
 {
   auto e = (vvenc::VVEncImpl*)enc;
   if (!e)
@@ -192,7 +191,8 @@ VVENC_DECL int vvenc_encoder_open( vvencEncoder *enc, vvenc_config* config )
     return VVENC_ERR_INITIALIZE;
   }
 
-  int ret = e->init( config );
+   int ret = e->init( config );
+
   if (ret != 0)
   {
     // Error initializing the decoder

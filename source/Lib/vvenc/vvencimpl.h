@@ -91,7 +91,7 @@ public:
   VVEncImpl();
   virtual ~VVEncImpl();
 
-  int init( vvenc_config* config );
+  int init( vvenc_config* config);
 
   int initPass( int pass, const char* statsFName );
   int uninit();

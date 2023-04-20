@@ -158,6 +158,11 @@ void Partitioner::copyState( const Partitioner& other )
 #ifdef _DEBUG
   m_currArea  = other.m_currArea;
 #endif
+
+#if VVENC_ORACLE
+  metric_map_ctu = other.metric_map_ctu;
+#endif
+
 }
 
 void Partitioner::setMaxMinDepth( unsigned& minDepth, unsigned& maxDepth, const CodingStructure& cs, int QtbttSpeedUp, bool MergeFlag) const
@@ -286,11 +291,28 @@ void Partitioner::setMaxMinDepth( unsigned& minDepth, unsigned& maxDepth, const 
   }
 }
 
-void Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice )
+
+void Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const shape_map& sm, int videoWidth, int videoHeight)
 {
 #if _DEBUG
   m_currArea = ctuArea;
 #endif
+
+#if VVENC_ORACLE
+  int s_ctu = slice.sps->CTUSize;
+  int dim_w = videoWidth / s_ctu;
+  int dim_h = videoHeight / s_ctu;
+
+  if ( _chType == CH_L && ctuArea.lx() < dim_w * s_ctu && ctuArea.ly() < dim_h * s_ctu){
+
+	  int ind_w = int(ctuArea.lx() / s_ctu);
+	  int ind_h = int(ctuArea.ly() / s_ctu);
+	
+	  metric_map_ctu = sm[slice.poc][ind_h][ind_w];
+  }
+
+#endif
+
   currDepth   = 0;
   currTrDepth = 0;
   currBtDepth = 0;

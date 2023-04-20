@@ -82,6 +82,10 @@ EncCu::EncCu()
 {
 }
 
+#if VVENC_ORACLE
+	
+#endif
+
 void EncCu::initPic( Picture* pic )
 {
   const ReshapeData& reshapeData = pic->reshapeData;
@@ -368,8 +372,9 @@ void EncCu::xCompressCtu( CodingStructure& cs, const UnitArea& area, const unsig
 
   // init the partitioning manager
   Partitioner *partitioner = &m_partitioner;
-  partitioner->initCtu( area, CH_L, *cs.slice );
-  
+
+  partitioner->initCtu( area, CH_L, *cs.slice, m_pcEncCfg->m_sh_map, m_pcEncCfg->m_SourceWidth, m_pcEncCfg->m_SourceHeight);
+
   const Position& lumaPos = area.lumaPos();
   const bool leftSameTile  = lumaPos.x == 0 || m_tileIdx == cs.pps->getTileIdx( lumaPos.offset(-1, 0) );
   const bool aboveSameTile = lumaPos.y == 0 || m_tileIdx == cs.pps->getTileIdx( lumaPos.offset( 0,-1) );
@@ -705,8 +710,102 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
     }
 
 #endif
+
+
+#if VVENC_ORACLE
+
+	bool check_ns = true;
+	int posx_cu = partitioner.currArea().lx();
+	int posy_cu = partitioner.currArea().ly();
+
+	int width_cu = partitioner.currArea().lwidth();
+	int height_cu = partitioner.currArea().lheight();
+
+	int bord_w = int(m_pcEncCfg->m_SourceWidth / m_pcEncCfg->m_CTUSize) * m_pcEncCfg->m_CTUSize;
+	int bord_h = int(m_pcEncCfg->m_SourceHeight / m_pcEncCfg->m_CTUSize) * m_pcEncCfg->m_CTUSize;
+
+	EncTestMode encTestQt( { ETM_SPLIT_QT, ETO_STANDARD, qp, false } ), encTestBtv( { ETM_SPLIT_BT_V, ETO_STANDARD, qp, false } ), 
+		encTestBth( { ETM_SPLIT_BT_H, ETO_STANDARD, qp, false } ), encTestTth( { ETM_SPLIT_TT_H, ETO_STANDARD, qp, false } ), encTestTtv( { ETM_SPLIT_TT_V, ETO_STANDARD, qp, false } );
+
+
+	bool canqt = m_modeCtrl.trySplit( encTestQt, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_QUAD_SPLIT, cs ),
+		 canbv = m_modeCtrl.trySplit( encTestBtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_VERT_SPLIT, cs ),
+		 canbh = m_modeCtrl.trySplit( encTestBth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_HORZ_SPLIT, cs ),
+		 canth = m_modeCtrl.trySplit( encTestTth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIH_SPLIT, cs ),
+		 cantv = m_modeCtrl.trySplit( encTestTtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIV_SPLIT, cs );
+	
+
+	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h){
+
+		int x_in_ctu = posx_cu % m_pcEncCfg->m_CTUSize;
+		int y_in_ctu = posy_cu % m_pcEncCfg->m_CTUSize;
+		std::string metric = p_m.metric;
+		int scale = p_m.metric_scale;
+		uint8_t w_val, h_val, val;
+
+		int start_x = x_in_ctu / scale;
+		int end_x =	(x_in_ctu + width_cu + scale - 1) / scale;
+		int start_y = y_in_ctu / scale;
+		int end_y = (y_in_ctu + height_cu + scale - 1) / scale;
+
+		int size_map = m_pcEncCfg->m_CTUSize / scale;
+
+		if (metric == "max_size_map_1d"){
+			val = 0;
+			for (int ind_y = start_y; ind_y < end_y; ind_y++){
+				for (int ind_x = start_x; ind_x < end_x; ind_x++){
+					val = std::max(val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+				}
+			}
+			CHECK(val < 4, "Max size for map 1d should be larger than 4!");
+			check_ns = (width_cu <= val && height_cu <= val);  
+
+		}else if (metric == "max_size_map_2d"){
+			w_val = h_val = 0;
+			for (int ind_y = start_y; ind_y < end_y; ind_y++){
+				for (int ind_x = start_x; ind_x < end_x; ind_x++){
+					w_val = std::max(w_val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+					h_val = std::max(h_val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
+				}
+			}
+			CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
+			CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
+			check_ns = (width_cu <= w_val && height_cu <= h_val);
+		}else if (metric == "min_size_map_1d"){
+			val = 255;
+			for (int ind_y = start_y; ind_y < end_y; ind_y++){
+				for (int ind_x = start_x; ind_x < end_x; ind_x++){
+					val = std::min(val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+				}
+			}
+			CHECK(val < 4, "Min size for map 1d should be larger than 4!");
+			check_ns = (width_cu >= val && height_cu >= val);  
+		}else if (metric == "min_size_map_2d"){
+			w_val = h_val = 255;
+			for (int ind_y = start_y; ind_y < end_y; ind_y++){
+				for (int ind_x = start_x; ind_x < end_x; ind_x++){
+					w_val = std::min(w_val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+					h_val = std::min(h_val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
+				}
+			}
+			CHECK(w_val < 4, "Min size 2d for width should be larger than 4!");
+			CHECK(h_val < 4, "Min size 2d for height should be larger than 4!");
+			check_ns = (width_cu >= w_val && height_cu >= h_val);		
+
+		}
+	}
+
+	if (!canqt && !canbh && !canbv && !canth && !cantv)
+		check_ns = true;
+#endif
+
+
+#if VVENC_ORACLE
+	if( ! isBoundary && check_ns)
+#else
     if( ! isBoundary )
-    {
+#endif
+	{
       if (pps.useDQP && partitioner.isSepTree (*tempCS) && isChroma (partitioner.chType))
       {
         const ChromaFormat chromaFm = tempCS->area.chromaFormat;
@@ -833,6 +932,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
     //////////////////////////////////////////////////////////////////////////
     // split modes
     EncTestMode lastTestMode;
+
 
     if( cuECtx.qtBeforeBt )
     {
@@ -1127,8 +1227,10 @@ void EncCu::xCheckModeSplitInternal(CodingStructure *&tempCS, CodingStructure *&
 
       if( bestSubCS->cost == MAX_DOUBLE )
       {
+//#if !VVENC_ORACLE
         CHECK( split == CU_QUAD_SPLIT, "Split decision reusing cannot skip quad split" );
-        tempCS->cost = MAX_DOUBLE;
+//#endif
+		tempCS->cost = MAX_DOUBLE;
         tempCS->costDbOffset = 0;
         m_CurrCtx--;
         partitioner.exitCurrSplit();

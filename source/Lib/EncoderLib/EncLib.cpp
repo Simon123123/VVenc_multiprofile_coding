@@ -57,11 +57,15 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "PreProcess.h"
 #include "EncGOP.h"
 
+#if VVENC_ORACLE
+#include <string>
+para_metrics p_m;
+#endif
+
 //! \ingroup EncoderLib
 //! \{
 
 namespace vvenc {
-
 
 // ====================================================================================================================
 // Constructor / destructor / create / destroy
@@ -108,8 +112,66 @@ void EncLib::setRecYUVBufferCallback( void* ctx, vvencRecYUVBufferCallback func 
 
 void EncLib::initEncoderLib( const vvenc_config& encCfg )
 {
+
+#if VVENC_ORACLE
+
+	std::string path = "/";
+#ifdef _WIN32
+	path = "\\";
+#endif
+
+  std::string filepath;
+  std::string filename = p_m.inp_f.substr(p_m.inp_f.find_last_of(path) + 1);
+  if (p_m.metric_path.find(path) < p_m.metric_path.length())
+	filepath = p_m.metric_path;	
+  else
+	filepath = p_m.metric_path + path; 
+
+  filepath +=  p_m.metric + "_scale_" +  std::to_string(p_m.metric_scale)  + "_cushape_map_trace_" + filename.substr(0, filename.find_last_of(".")) + "_qp" + std::to_string(p_m.metric_qp) + "_AI_encoder.csv";
+  
+  std::ifstream f(filepath);
+  CHECK(!f.is_open(), "The csv file is not found!" );
+  std::string line;
+  int num_w = encCfg.m_SourceWidth / encCfg.m_CTUSize;
+  int num_h = encCfg.m_SourceHeight / encCfg.m_CTUSize;
+  int num_c = 1;
+  int num_cell = (encCfg.m_CTUSize / p_m.metric_scale) * (encCfg.m_CTUSize / p_m.metric_scale);
+  if (p_m.metric ==  "max_size_map_2d" || p_m.metric ==  "min_size_map_2d")
+	  num_c = 2;
+  shape_map map_seq = std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>(encCfg.m_framesToBeEncoded,
+    std::vector<std::vector<std::vector<std::vector<uint8_t>>>>(num_h,
+        std::vector<std::vector<std::vector<uint8_t>>>(num_w, std::vector<std::vector<uint8_t>>(num_c, std::vector<uint8_t>(num_cell,0)))));
+
+
+  for (int ind_f = 0; ind_f < encCfg.m_framesToBeEncoded; ind_f++){
+	 for (int ind_h = 0; ind_h < num_h; ind_h++){
+		for (int ind_w = 0; ind_w < num_w; ind_w++){
+			for (int ind_c = 0; ind_c < num_c; ind_c++){
+				if (std::getline(f, line)){
+				
+					std::stringstream linestream(line);
+					std::string cell;
+					std::vector <uint8_t> row;
+					while (std::getline(linestream, cell, ';'))
+					  row.push_back((uint8_t)std::stoi(cell));
+					CHECK(row.size() != num_cell, "The size of metric map is not correct!" );
+					map_seq[ind_f][ind_h][ind_w][ind_c] = row;			
+				}else{
+					THROW("The number of rows in csv file is not correct!" );
+				}
+			}
+		}	
+	}
+
+  }
+
+#endif
+
   // copy config parameter
+
+  const_cast<VVEncCfg&>(m_encCfg).m_sh_map = map_seq;
   const_cast<VVEncCfg&>(m_encCfg) = encCfg;
+
 
   // setup modified configs for rate control
   if( m_encCfg.m_RCNumPasses > 1 || m_encCfg.m_LookAhead )
@@ -260,6 +322,7 @@ void EncLib::initPass( int pass, const char* statsFName )
   // gop encoder
   m_gopEncoder = new EncGOP( msg );
   const int minQueueSize = m_encCfg.m_GOPSize + 1;
+
   m_gopEncoder->initStage( m_encCfg, minQueueSize, 0, false, false, m_encCfg.m_stageParallelProc );
   m_gopEncoder->init( m_encCfg, m_preProcess->getGOPCfg(), *m_rateCtrl, m_threadPool, false );
   m_encStages.push_back( m_gopEncoder );

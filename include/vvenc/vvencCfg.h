@@ -55,6 +55,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #define VVENC_NAMESPACE_BEGIN
 #define VVENC_NAMESPACE_END
 
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -88,6 +90,9 @@ typedef void (*vvencLoggingCallback)(void*, int, const char*, va_list);
 #define VVENC_DEFAULT_QP                      32     // default base QP
 #define VVENC_AUTO_QP                        -1      // indicates to use default QP, or ignore if RC is used
 #define VVENC_RC_OFF                          0      // indicates rate control is disabled
+
+
+
 
 // ====================================================================================================================
 
@@ -417,6 +422,7 @@ VVENC_DECL void vvenc_vvencMCTF_default(vvencMCTF *vvencMCTF );
 typedef struct vvenc_config
 {
   // core config params
+
   int                 m_SourceWidth;                                                     // source width in pixel
   int                 m_SourceHeight;                                                    // source height in pixel (when interlaced = field height)
   int                 m_FrameRate;                                                       // source frame-rates (Hz) Numerator
@@ -433,6 +439,9 @@ typedef struct vvenc_config
   vvencMsgLevel       m_verbosity;                                                       // encoder verbosity level
 
   // basic config params
+
+
+
 
   vvencProfile        m_profile;                                                         // profile 
   vvencTier           m_levelTier;                                                       // Tier to use for interpretation of level (main or high)

@@ -47,6 +47,16 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "vvenc/vvencCfg.h"
 
+#ifndef VVENC_ORACLE 
+#define VVENC_ORACLE            1
+#endif
+
+#if VVENC_ORACLE
+#include <vector>
+	typedef std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>                   shape_map;
+#endif
+
+
 namespace vvenc {
 
 struct VVEncCfg : public vvenc_config
@@ -60,6 +70,10 @@ struct VVEncCfg : public vvenc_config
   int  m_log2GopSize;
   int  m_maxTLayer;
   int  m_bimCtuSize;
+
+#if VVENC_ORACLE 
+  shape_map m_sh_map;
+#endif
 
 private:
   void xInitCfgMembers();

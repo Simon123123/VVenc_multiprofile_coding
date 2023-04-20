@@ -108,6 +108,7 @@ private:
   std::deque<AccessUnitList> m_AuList;
 
 public:
+
   EncLib( MsgLog& logger );
   virtual ~EncLib();
 

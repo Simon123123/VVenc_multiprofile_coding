@@ -58,11 +58,15 @@ POSSIBILITY OF SUCH DAMAGE.
 #define VVENC_NAMESPACE_BEGIN
 #define VVENC_NAMESPACE_END
 
+
+#include <string>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 VVENC_NAMESPACE_BEGIN
+
 
 
 /*
@@ -245,7 +249,10 @@ VVENC_DECL vvencEncoder* vvenc_encoder_create( void );
   \retval     int  if non-zero an error occurred (see ErrorCodes), otherwise the return value indicates success VVENC_OK
   \pre        The encoder must not be initialized.
 */
+
 VVENC_DECL int vvenc_encoder_open( vvencEncoder*, vvenc_config* );
+
+
 
 /* vvenc_encoder_close
  This method resets the encoder instance.

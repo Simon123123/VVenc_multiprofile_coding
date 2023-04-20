@@ -119,6 +119,27 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \ingroup CommonLib
 //! \{
 
+#ifndef VVENC_ORACLE
+#define VVENC_ORACLE							1
+#endif
+
+#if VVENC_ORACLE
+#include <string>
+#endif
+
+#if VVENC_ORACLE
+typedef struct para_metrics{
+	std::string metric;
+	std::string metric_path;
+	int metric_scale;
+	int metric_qp;
+	std::string inp_f;
+} para_metrics;
+
+extern para_metrics p_m;
+
+#endif
+
 namespace vvenc {
 
 // ====================================================================================================================

@@ -50,10 +50,22 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <chrono>
 #include <ctime>
 
+#ifndef VVENC_ORACLE
+#define   VVENC_ORACLE     1
+#endif
+
+#if VVENC_ORACLE
+#include "CommonLib/CommonDef.h"
+//para_metrics p_m;
+#endif
+
+
 #include "EncApp.h"
 #include "apputils/ParseArg.h"
 
 #include "vvenc/vvenc.h"
+
+
 
 //! \ingroup EncoderApp
 //! \{
@@ -65,6 +77,10 @@ POSSIBILITY OF SUCH DAMAGE.
 
 int main(int argc, char* argv[])
 {
+
+#if VVENC_ORACLE
+   p_m = {"", "", 0, 0, ""};
+#endif
   vvenc_set_logging_callback( nullptr, msgFnc ); // register global log callback ( deprecated, will be removed)
 
   std::string simdOpt;

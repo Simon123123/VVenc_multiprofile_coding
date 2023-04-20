@@ -1270,7 +1270,6 @@ public:
   void                        setSMVDParam();
   void                        checkColRefIdx(uint32_t curSliceSegmentIdx, const Picture* pic) const;
   void                        setAlfAPSs(APS** apss)                                 { memcpy(alfAps, apss, sizeof(alfAps)); }
-
   const Picture*              getRefPic( RefPicList e, int iRefIdx) const            { return refPicList[e][iRefIdx]; }
   int                         getRefPOC( RefPicList e, int iRefIdx) const            { return refPOCList[e][iRefIdx]; }
   int                         getNumEntryPoints(const SPS& sps, const PPS& pps) const;

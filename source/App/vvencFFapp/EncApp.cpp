@@ -207,6 +207,7 @@ int EncApp::encode()
     return -1;
   }
 
+
   int iRet = vvenc_encoder_open( m_encCtx, &vvencCfg);
   if( 0 != iRet )
   {

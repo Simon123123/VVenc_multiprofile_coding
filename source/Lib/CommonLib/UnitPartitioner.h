@@ -147,6 +147,10 @@ public:
   unsigned maxTtSize;
   unsigned minQtSize;
 
+#if VVENC_ORACLE
+  std::vector<std::vector<uint8_t>> metric_map_ctu;
+#endif
+
   const PartLevel& currPartLevel          () const { return m_partStack.back(); }
   const UnitArea&  currArea               () const { return currPartLevel().parts[currPartIdx()]; }
   const unsigned   currPartIdx            () const { return currPartLevel().idx; }
@@ -156,8 +160,11 @@ public:
 
   SplitSeries getSplitSeries              () const;
   ModeTypeSeries getModeTypeSeries        () const;
-
+#if VVENC_ORACLE
+  void initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const shape_map& sm = shape_map(), int videoWidth = 0, int videoHeight = 0);
+#else
   void initCtu                            ( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice );
+#endif
   void splitCurrArea                      ( const PartSplit split, const CodingStructure &cs );
   void exitCurrSplit                      ();
   bool nextPart                           ( const CodingStructure &cs, bool autoPop = false );

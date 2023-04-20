@@ -152,6 +152,7 @@ int VVEncImpl::init( vvenc_config* config )
   // initialize the encoder
   m_pEncLib = new EncLib ( msg );
 
+
 #if HANDLE_EXCEPTION
   try
 #endif
