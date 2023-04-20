@@ -8,7 +8,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--log', help='CSV log file to parse', type=str, default='trace_bqsquare_qp22.csv')
 parser.add_argument('--path', help='Subdirectory to logs', type=str, default='data')
 parser.add_argument('--cell_size', help='Cell size of the CTU map', type=int, default=8)
-parser.add_argument('--metric', help='Metric to record from log (max_size, what else?)', type=str, default='max_size')
+parser.add_argument('--metric', help='Metric to record from log (max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d, what else?)', type=str, default='max_size_1d')
 args = parser.parse_args()
 
 
@@ -34,7 +34,10 @@ def main():
 
 def get_metric_map_ctu(data, metric, cell_size):
     size_in_cell = ctu_size // cell_size
-    metric_map = np.zeros((size_in_cell, size_in_cell))
+    dim = 1
+    if metric == 'max_size_2d' or metric == 'min_size_2d':
+        dim = 2
+    metric_map = np.zeros((size_in_cell, size_in_cell, dim))
     for cu in data:
         update_map_with_cu(metric_map, cu, metric)
 
@@ -49,16 +52,26 @@ def update_map_with_cu(metric_map, cu, metric):
     cell_size = ctu_size // metric_map.shape[0]  # dirty!
     start_x, end_x, start_y, end_y = get_concerned_cells_from_cu_coordinates(cu_x, cu_y, cu_width, cu_height, cell_size)
 
-    if metric == 'max_size':
+    if metric == 'max_size_1d':
         value = max(cu_width, cu_height)
-    else:
+    elif metric == 'min_size_1d':
+        value = min(cu_width, cu_height)
+    elif metric not in ['max_size_2d', 'min_size_2d']:
         print(f'ERROR: {metric} not implemented\nExiting.')
         exit(0)
 
     for y in range(start_y, end_y):
         for x in range(start_x, end_x):
-            if metric == 'max_size':
-                metric_map[y, x] = max(metric_map[y, x], value)
+            if metric == 'max_size_1d':
+                metric_map[y, x, 0] = max(metric_map[y, x, 0], value)
+            elif metric == 'min_size_1d':
+                metric_map[y, x, 0] = min(metric_map[y, x, 0], value)
+            elif metric == 'max_size_2d':
+                metric_map[y, x, 0] = max(metric_map[y, x, 0], cu_width)
+                metric_map[y, x, 1] = max(metric_map[y, x, 1], cu_height)
+            elif metric == 'min_size_2d':
+                metric_map[y, x, 0] = min(metric_map[y, x, 0], cu_width)
+                metric_map[y, x, 1] = min(metric_map[y, x, 1], cu_height)                
             else:
                 print(f'ERROR: {metric} not implemented\nExiting.')
                 exit(0)
