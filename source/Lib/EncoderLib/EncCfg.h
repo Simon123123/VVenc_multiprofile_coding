@@ -47,9 +47,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "vvenc/vvencCfg.h"
 
-#ifndef VVENC_ORACLE 
 #define VVENC_ORACLE            1
-#endif
 
 #if VVENC_ORACLE
 #include <vector>

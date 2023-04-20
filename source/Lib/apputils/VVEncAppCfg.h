@@ -67,9 +67,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #define MACRO_TO_STRING(val) MACRO_TO_STRING_HELPER(val)
 
 
-#ifndef VVENC_ORACLE
-#define VVENC_ORACLE              1
-#endif
 
 #if VVENC_ORACLE
 #include "CommonLib/CommonDef.h"

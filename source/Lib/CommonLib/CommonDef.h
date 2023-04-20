@@ -119,9 +119,6 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \ingroup CommonLib
 //! \{
 
-#ifndef VVENC_ORACLE
-#define VVENC_ORACLE							1
-#endif
 
 #if VVENC_ORACLE
 #include <string>
