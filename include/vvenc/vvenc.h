@@ -59,8 +59,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #define VVENC_NAMESPACE_END
 
 
-#include <string>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
