@@ -28,27 +28,34 @@ split types: 0 => Not split, 2 => Binary Horzontal Split, 3 => Binary Vertical S
 
 
 
+
+
+
+
 ## Shortcut by CU size info:
  
 Step 1: Get the trace file for encoding QP37, for this we should manually set the macro VVENC_STAT to 1 (line 91 of .\source\Lib\CommonLib\TypeDef.h) and set the macro VVENC_ORACLE to 0 (line 50 of .\source\Lib\EncoderLib\EncCfg.h) and build the release bin file
- 
-   ./vvencFFapp –InputFile  <path_to_yuv>  -s 416x240  -fr 60 -f 8 -q 37 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b BQSquare_416x240p_60Hz_iyuv_qp37_AI.266  --TraceFile="BQSquare_416x240p_60Hz_iyuv_qp37_AI_encoder.csv"  --TraceRule="D_PART_STAT:poc>=0"   > BQSquare_416x240p_60Hz_iyuv_qp37_AI_encoder.txt
- 
-Step 2: Get the cu size numpy file 
+
+   ./vvencFFapp  --InputFile  <path_to_yuv>  -s 416x240  -fr 60 -f 8 -q 37 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b BQSquare_416x240p_60Hz_iyuv_qp37_AI.266  --TraceFile="BQSquare_416x240p_60Hz_iyuv_qp37_AI_encoder.csv"  --TraceRule="D_PART_STAT:poc>=0"   > BQSquare_416x240p_60Hz_iyuv_qp37_AI_encoder.txt
+
+Step 2: Get the cu size numpy file,  the -f option should be the number of frame contained by each csv trace file. -p should be the path containing all these csv trace files. 
  
 python   ./csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files>
- 
+
 Step 3: Process the cu size file to get the max/min size map, for the --path and --npy option, we should just give the path (do not specify the file name)
- 
+
 python ./get_metric_map_from_npy.py --npy <path to the cu size numpy file>    --path  <path for the generated size map> --cell_size  <the scale of generated size map>  --metric <what kind of map we want to have>
- 
+
 Here the cell size indicate the scale by number of pixels on which we calculate the size map. For example  --cell_size  8 means we get a max/min size value for each 8x8 region inside CTU.  The metric option has 4 possible values: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d. For example, max_size_map_1d means we will get a max value of width and height for each cell_size x cell_size region. Meanwhile, the max_size_map_2d is that we will get max maps separately for width and height, so the max map is two dimensional.
- 
+
 Step 4: Accelerate the encoding QP22 by reading the size map, for this we should set VVENC_STAT to 0 and VVENC_ORACLE to 1 and build the release bin file
- 
-   ./vvencFFapp    –InputFile  <path_to_yuv>  -s 416x240 -fr 60 -f 8 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b str.266  -q 22 --metric  max_size_map_2d  --metricscale 8 --metricpath  <path for the size map to load>  --metricqp 37 
+
+   ./vvencFFapp    --InputFile  <path_to_yuv>  -s 416x240 -fr 60 -f 8 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b str.266  -q 22 --metric  max_size_map_2d  --metricscale 8 --metricpath  <path for the size map to load>  --metricqp 37 
  
 Here the metricqp option represent the QP of encoding we want to use to speed up. metricscale is the same as cell_size of step 3. For --metricpath option, we should not specify the filename
+
+
+
 
 
 
