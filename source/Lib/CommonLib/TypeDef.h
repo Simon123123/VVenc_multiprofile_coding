@@ -92,16 +92,13 @@ namespace vvenc {
 #define VVENC_CTU										  0 
 #endif
 
-#define VVENC_ORACLE									  1
-
-#if VVENC_ORACLE
-// the shape map is defined as follow form [poc, pos_y_ctu_frame, pos_x_ctu_frame, 2, size_map * size_map]
-typedef std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>                   shape_map;
-#endif
-
 
 #ifndef ENABLE_TRACING
+#if VVENC_STAT
+#define ENABLE_TRACING                                    1 // DISABLED by default (enable only when debugging, requires additional runtime)
+#else
 #define ENABLE_TRACING                                    0 // DISABLED by default (enable only when debugging, requires additional runtime)
+#endif
 #endif
 
 #ifndef ENABLE_TIME_PROFILING

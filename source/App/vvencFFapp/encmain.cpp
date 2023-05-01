@@ -50,14 +50,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <chrono>
 #include <ctime>
 
-#ifndef VVENC_ORACLE
-#define   VVENC_ORACLE     1
-#endif
 
-#if VVENC_ORACLE
 #include "CommonLib/CommonDef.h"
-//para_metrics p_m;
-#endif
 
 
 #include "EncApp.h"

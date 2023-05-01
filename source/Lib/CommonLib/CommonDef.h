@@ -119,12 +119,10 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \ingroup CommonLib
 //! \{
 
-
 #if VVENC_ORACLE
+
 #include <string>
-#endif
 
-#if VVENC_ORACLE
 typedef struct para_metrics{
 	std::string metric;
 	std::string metric_path;

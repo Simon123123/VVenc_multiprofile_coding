@@ -82,9 +82,6 @@ EncCu::EncCu()
 {
 }
 
-#if VVENC_ORACLE
-	
-#endif
 
 void EncCu::initPic( Picture* pic )
 {
@@ -373,7 +370,12 @@ void EncCu::xCompressCtu( CodingStructure& cs, const UnitArea& area, const unsig
   // init the partitioning manager
   Partitioner *partitioner = &m_partitioner;
 
+#if VVENC_ORACLE
   partitioner->initCtu( area, CH_L, *cs.slice, m_pcEncCfg->m_sh_map, m_pcEncCfg->m_SourceWidth, m_pcEncCfg->m_SourceHeight);
+#else
+  partitioner->initCtu( area, CH_L, *cs.slice);
+#endif
+
 
   const Position& lumaPos = area.lumaPos();
   const bool leftSameTile  = lumaPos.x == 0 || m_tileIdx == cs.pps->getTileIdx( lumaPos.offset(-1, 0) );

@@ -292,7 +292,11 @@ void Partitioner::setMaxMinDepth( unsigned& minDepth, unsigned& maxDepth, const 
 }
 
 
+#if VVENC_ORACLE
 void Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const shape_map& sm, int videoWidth, int videoHeight)
+#else
+void  Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice )
+#endif
 {
 #if _DEBUG
   m_currArea = ctuArea;

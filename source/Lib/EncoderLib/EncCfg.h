@@ -47,15 +47,21 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "vvenc/vvencCfg.h"
 
-#define VVENC_ORACLE            1
+#define  VVENC_ORACLE				1
 
 #if VVENC_ORACLE
 #include <vector>
-	typedef std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>                   shape_map;
 #endif
 
-
 namespace vvenc {
+
+
+
+#if VVENC_ORACLE
+// the shape map is defined as follow form [poc, pos_y_ctu_frame, pos_x_ctu_frame, 2, size_map * size_map]
+typedef std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>                   shape_map;
+#endif
+
 
 struct VVEncCfg : public vvenc_config
 {

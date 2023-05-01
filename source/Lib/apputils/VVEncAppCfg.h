@@ -47,7 +47,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "vvenc/vvencCfg.h"
 #include "vvenc/vvenc.h"
 
-
 #include <string>
 #include <vector>
 #include <tuple>
@@ -68,10 +67,10 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 
-#if VVENC_ORACLE
+
 #include "CommonLib/CommonDef.h"
 //para_metrics p_m;
-#endif
+
 
 
 using namespace std;

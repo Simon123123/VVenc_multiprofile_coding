@@ -169,7 +169,9 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 
   // copy config parameter
 
+#if VVENC_ORACLE
   const_cast<VVEncCfg&>(m_encCfg).m_sh_map = map_seq;
+#endif
   const_cast<VVEncCfg&>(m_encCfg) = encCfg;
 
 
