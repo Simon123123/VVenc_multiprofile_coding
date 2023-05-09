@@ -48,6 +48,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "vvenc/vvencCfg.h"
 
 #define  VVENC_ORACLE				1
+#define  VVENC_CU_RDO_TRACE		    0
 
 #if VVENC_ORACLE
 #include <vector>

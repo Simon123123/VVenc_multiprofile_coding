@@ -797,8 +797,41 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		}
 	}
 
+#if VVENC_CU_RDO_TRACE
+	FILE* cu_rdo_trace = fopen( "trace_RDO_CU.csv", "a+" );
+
+	fprintf(cu_rdo_trace, "%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;\n", tempCS->picture->poc, posx_cu, posy_cu, width_cu, height_cu, canqt, canbh, canbv, canth, cantv, check_ns);
+	
+	fclose(cu_rdo_trace);
+#endif
+
 	if (!canqt && !canbh && !canbv && !canth && !cantv)
 		check_ns = true;
+
+#elif VVENC_CU_RDO_TRACE
+
+	int posx_cu = partitioner.currArea().lx();
+	int posy_cu = partitioner.currArea().ly();
+
+	int width_cu = partitioner.currArea().lwidth();
+	int height_cu = partitioner.currArea().lheight();
+
+	EncTestMode encTestQt( { ETM_SPLIT_QT, ETO_STANDARD, qp, false } ), encTestBtv( { ETM_SPLIT_BT_V, ETO_STANDARD, qp, false } ), 
+		encTestBth( { ETM_SPLIT_BT_H, ETO_STANDARD, qp, false } ), encTestTth( { ETM_SPLIT_TT_H, ETO_STANDARD, qp, false } ), encTestTtv( { ETM_SPLIT_TT_V, ETO_STANDARD, qp, false } );
+
+
+	bool canqt = m_modeCtrl.trySplit( encTestQt, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_QUAD_SPLIT, cs ),
+		 canbv = m_modeCtrl.trySplit( encTestBtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_VERT_SPLIT, cs ),
+		 canbh = m_modeCtrl.trySplit( encTestBth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_HORZ_SPLIT, cs ),
+		 canth = m_modeCtrl.trySplit( encTestTth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIH_SPLIT, cs ),
+		 cantv = m_modeCtrl.trySplit( encTestTtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIV_SPLIT, cs );
+	
+
+	FILE* cu_rdo_trace = fopen( "trace_RDO_CU.csv", "a+" );
+
+	fprintf(cu_rdo_trace, "%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;\n", tempCS->picture->poc, posx_cu, posy_cu, width_cu, height_cu, canqt, canbh, canbv, canth, cantv);
+	
+	fclose(cu_rdo_trace);
 #endif
 
 

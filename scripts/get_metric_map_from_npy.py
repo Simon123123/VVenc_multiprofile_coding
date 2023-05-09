@@ -52,7 +52,8 @@ def main():
         elif args.metric == 'min_size_map_1d':
             shape = np.minimum(shape_w, shape_h)
         else:
-            shape = np.concatenate((shape_w, shape_h), axis = -1)
+            # shape = np.concatenate((shape_w, shape_h), axis = -1)
+            shape = np.stack((shape_w, shape_h), axis = 1)
         
         shape = shape.reshape(-1, size_map*size_map)
         np.savetxt(os.path.join(args.path, args.metric + '_scale_' + str(args.cell_size) + '_' + filename + '.csv'), shape, fmt='%d', delimiter=';')
