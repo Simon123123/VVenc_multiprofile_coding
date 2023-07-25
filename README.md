@@ -61,7 +61,7 @@ Here the metricqp option represent the QP of encoding we want to use to speed up
 ## Getting the table of comparison between reference coding and dependent coding
 
 
-python ./scripts/compare_cu_shape.py    <path to the cu shape files>
+python ./scripts/compare_cu_shape.py    <path_to_cushape_files>
 
 1. The cushape files are with file name started by cushape_map. These files are obtained after running the csv_process.npy.
 
