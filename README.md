@@ -58,6 +58,20 @@ Here the metricqp option represent the QP of encoding we want to use to speed up
 
 
 
+## Getting the table of comparison between reference coding and dependent coding
+
+
+python ./scripts/compare_cu_shape.py    <path to the cu shape files>
+
+1. The cushape files are with file name started by cushape_map. These files are obtained after running the csv_process.npy.
+
+2. The format of output is like this:  
+	4x4 matrix 
+	row represents dependent coding with QP 22, 27, 32, 37
+	column represents reference coding with QP 22, 27, 32, 37  
+ 
+3. each element of matrixs indicates the percentage of regions where the CU sizes of dependent encoding is smaller or equal to (both width and height) that of reference encoding   
+
 
 
 

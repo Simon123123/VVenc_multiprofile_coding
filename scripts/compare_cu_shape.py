@@ -22,7 +22,7 @@ for qp in qps:
     
     list_npys = []
     for f in files_all:
-        if ('qp' + str(qp)) in f:
+        if ('qp' + str(qp)) in f and 'cushape' in f:
             list_npys.append(f)
         
     new = np.load(list_npys[0])
