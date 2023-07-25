@@ -127,7 +127,7 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
   else
 	filepath = p_m.metric_path + path; 
 
-  filepath +=  p_m.metric + "_scale_" +  std::to_string(p_m.metric_scale)  + "_cushape_map_trace_" + filename.substr(0, filename.find_last_of(".")) + "_qp" + std::to_string(p_m.metric_qp) + "_AI_encoder.csv";
+  filepath +=  p_m.metric + "_scale_" +  std::to_string(p_m.metric_scale)  + "_cushape_map_trace_" + filename.substr(0, filename.find_last_of(".")) + "_qp" + std::to_string(p_m.metric_qp) + "_RA_encoder.csv";
   
   std::ifstream f(filepath);
   CHECK(!f.is_open(), "The csv file is not found!" );
