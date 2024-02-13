@@ -114,12 +114,29 @@ std::vector<std::string> split( const std::string &s, char delim )
     split( s, delim, elems );
     return elems;
 }
+#if VVENC_MULTI_RESO
+CDTrace::CDTrace(const char* filename, vstring channel_names)
+    : copy(false), m_trace_file(NULL), m_trace_file_mr(NULL), m_error_code(0)
+#else
+CDTrace::CDTrace(const char* filename, vstring channel_names)
+    : copy(false), m_trace_file(NULL), m_error_code(0)
+#endif
 
-CDTrace::CDTrace( const char *filename, vstring channel_names )
-    : copy(false), m_trace_file(NULL), m_error_code( 0 )
 {
     if( filename )
         m_trace_file = fopen( filename, "w" );
+
+
+#if VVENC_MULTI_RESO
+
+    if (filename) {
+        std::string name_mr = "mr_" + std::to_string(multireso) + "_trace_" + filename;
+        m_trace_file_mr = fopen(name_mr.c_str(), "w");
+    }
+
+#endif
+
+
 
     int i = 0;
     for( vstring::iterator ci = channel_names.begin(); ci != channel_names.end(); ++ci ) {
@@ -139,6 +156,9 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
 #if VVENC_CTU
 	std::string name_ctu;
 #endif
+#if VVENC_MULTI_RESO
+    std::string name_mr;
+#endif
 	std::string name_trace;
 	std::string path = "/";
 #ifdef _WIN32
@@ -149,15 +169,29 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
 		name_ctu =  "CTU_" + name_file;
 #endif
 		name_trace = "trace_" + name_file;
+
+#if VVENC_MULTI_RESO
+        name_mr = "mr_" + std::to_string(multireso) + "_trace_" + name_file;
+#endif
+
 	}else{
 #if VVENC_CTU
 		name_ctu = name_file.substr(0, name_file.find_last_of(path) + 1) + "CTU_" + name_file.substr(name_file.find_last_of(path) + 1);	
 #endif
 		name_trace = name_file.substr(0, name_file.find_last_of(path) + 1) + "trace_" + name_file.substr(name_file.find_last_of(path) + 1);	
-	}
+
+#if VVENC_MULTI_RESO
+        name_mr = name_file.substr(0, name_file.find_last_of(path) + 1) + "mr_" + std::to_string(multireso) + "_trace_" + name_file.substr(name_file.find_last_of(path) + 1);
+#endif	
+    
+    }
 	m_trace_file = fopen( name_trace.c_str(), "w" );
 #if VVENC_CTU
 	m_trace_file_ctu = fopen(name_ctu.c_str(), "w");
+#endif
+
+#if VVENC_MULTI_RESO
+    m_trace_file_mr = fopen(name_mr.c_str(), "w");
 #endif
 
   }
@@ -184,6 +218,10 @@ CDTrace::CDTrace( const CDTrace& other )
 #if VVENC_STAT && VVENC_CTU
 	m_trace_file_ctu	 = other.m_trace_file_ctu;
 #endif
+#if VVENC_MULTI_RESO
+    m_trace_file_mr = other.m_trace_file_mr;
+#endif
+
     chanRules            = other.chanRules;
     condition_types      = other.condition_types;
     state                = other.state;
@@ -211,6 +249,11 @@ void CDTrace::swap( CDTrace& other )
 #if VVENC_STAT && VVENC_CTU
 	swap(first.m_trace_file_ctu,second.m_trace_file_ctu);
 #endif
+
+#if VVENC_MULTI_RESO
+    swap(first.m_trace_file_mr, second.m_trace_file_mr);
+#endif
+
     swap(first.chanRules,second.chanRules);
     swap(first.condition_types,second.condition_types);
     swap(first.state,second.state);
@@ -228,10 +271,17 @@ CDTrace::~CDTrace()
 {
     if( !copy && m_trace_file )
         fclose( m_trace_file );
+
 #if VVENC_STAT && VVENC_CTU
     if( !copy && m_trace_file_ctu )
         fclose( m_trace_file_ctu );
 #endif
+
+#if VVENC_MULTI_RESO
+    if (!copy && m_trace_file_mr)
+        fclose(m_trace_file_mr);
+#endif
+
 }
 
 bool _cf_eq ( int bound, int val ) { return ( val==bound ); }
@@ -358,6 +408,22 @@ void CDTrace::dtrace( int k, const char *format, /*va_list args*/... )
   }
   return;
 }
+
+#if VVENC_MULTI_RESO
+void CDTrace::dtrace_multireso( const char* format, /*va_list args*/...)
+{
+    if (m_trace_file_mr)
+    {
+        va_list args;
+        va_start(args, format);
+        vfprintf(m_trace_file_mr, format, args);
+        fflush(m_trace_file_mr);
+    }
+    return;
+}
+
+#endif
+
 
 #if VVENC_STAT && VVENC_CTU
 

@@ -415,6 +415,7 @@ void EncCu::xCompressCtu( CodingStructure& cs, const UnitArea& area, const unsig
   xCompressCU( tempCS, bestCS, *partitioner );
   // all signals were already copied during compression if the CTU was split - at this point only the structures are copied to the top level CS
   
+
   // Ensure that a coding was found
   // Selected mode's RD-cost must be not MAX_DOUBLE.
   CHECK( bestCS->cus.empty()                                   , "No possible encoding found" );
@@ -1039,6 +1040,31 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
     m_modeCtrl.finishCULevel( partitioner );
     return;
   }
+
+
+#if VVENC_MULTI_RESO
+  int sizeRegion = m_pcEncCfg->m_CTUSize / multireso;
+  int shiftBits = Log2(multireso);
+  int qtBits = 0;
+  for (int i = 0; i < shiftBits; i++)
+      qtBits += (CU_QUAD_SPLIT << (i * SPLIT_BITS));
+  uint64_t qtsplits = (1ULL << (shiftBits * SPLIT_BITS)) - 1;
+  if (bestCS->area.lwidth() == sizeRegion && bestCS->area.lheight() == sizeRegion && bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_L) != nullptr && (bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_L)->splitSeries & qtsplits) == qtBits) {
+
+      const CodingUnit* firstCU = bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_D);
+      const CodingUnit* lastCU = firstCU;
+
+
+      do {
+
+          g_trace_ctx->dtrace_multireso("%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;%d\n", lastCU->slice->poc, lastCU->Y().x, lastCU->Y().y, lastCU->Y().width, lastCU->Y().height, lastCU->splitSeries, lastCU->depth, lastCU->qtDepth, lastCU->mtDepth, lastCU->btDepth, lastCU->qp);
+      
+      } while (lastCU && (0 != (lastCU = lastCU->next)) && bestCS->area.contains(*lastCU));
+
+  }
+
+#endif
+
 
   //////////////////////////////////////////////////////////////////////////
   // Finishing CU

@@ -108,9 +108,15 @@ class CDTrace
 private:
     bool          copy;
     FILE         *m_trace_file;
-#if VVENC_STAT && VVENC_CTU
+
+#if VVENC_CTU
     FILE         *m_trace_file_ctu;
 #endif
+
+#if VVENC_MULTI_RESO
+    FILE         *m_trace_file_mr;
+#endif
+
     int           m_error_code;
 
     typedef std::string Key;
@@ -122,7 +128,13 @@ private:
     std::map< Key, int > deserializationTable;
 
 public:
+
+#if VVENC_MULTI_RESO
+    CDTrace() : copy(false), m_trace_file(NULL), m_trace_file_mr(NULL) {}
+#else
     CDTrace() : copy(false), m_trace_file(NULL) {}
+#endif
+
     CDTrace( const char *filename, vstring channel_names );
     CDTrace( const char *filename, const dtrace_channels_t& channels );
     CDTrace( const std::string& sTracingFile, const std::string& sTracingRule, const dtrace_channels_t& channels );
@@ -135,6 +147,9 @@ public:
     void dtrace       ( int, const char *format, /*va_list args*/... );
 #if VVENC_STAT && VVENC_CTU
 	void dtrace_ctu(int poc, int posx, int posy, int stride, const int16_t* buf);
+#endif
+#if VVENC_MULTI_RESO
+    void dtrace_multireso(const char* format, /*va_list args*/...);
 #endif
 	void dtrace_repeat( int, int i_times, const char *format, /*va_list args*/... );
     bool update       ( state_type stateval );

@@ -62,6 +62,11 @@ POSSIBILITY OF SUCH DAMAGE.
 para_metrics p_m;
 #endif
 
+#if VVENC_MULTI_RESO
+int multireso;
+#endif
+
+
 //! \ingroup EncoderLib
 //! \{
 

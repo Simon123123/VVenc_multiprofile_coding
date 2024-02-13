@@ -1121,6 +1121,11 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
 	("metricpath",                                       p_m.metric_path,                                      "Set the path of metric csv files")
 	("metricqp",                                         p_m.metric_qp,                                        "Set the qp metric map")
 #endif
+
+#if VVENC_MULTI_RESO
+    ("mr", multireso, "The upscale factor of encoding with multiple resolution senario, should be an integer larger than 1")
+#endif
+
     ;
   }
 
@@ -1228,6 +1233,9 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
       err.error( "Metric oracle path" ) << "Should not be void! \n";
     }
 #endif
+
+
+
     if( !m_bitstreamFileName.empty() && !apputils::FileIOHelper::checkBitstreamFile( m_bitstreamFileName, cErr ) )
     {
       err.warn( "Bitstream file" ) << cErr;

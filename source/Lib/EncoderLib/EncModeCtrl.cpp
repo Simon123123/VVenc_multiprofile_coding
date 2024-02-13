@@ -644,6 +644,14 @@ bool EncModeCtrl::trySplit( const EncTestMode& encTestmode, const CodingStructur
   const PartSplit implicitSplit = partitioner.getImplicitSplit( cs );
   const bool isBoundary         = implicitSplit != CU_DONT_SPLIT;
 
+
+#if VVENC_QT_SHORTCUT_DIS
+  if (encTestmode.type == ETM_SPLIT_QT && partitioner.canSplit(CU_QUAD_SPLIT, cs) && partitioner.currQtDepth < Log2(multireso)) 
+      return true;
+#endif
+
+
+
   if( ( m_pcEncCfg->m_IntraPeriod == 1 ) && ( partitioner.chType == CH_C ) && ( !cuECtx.doQtChromaSplit ) )
   {
     cuECtx.maxDepth         = partitioner.currDepth;

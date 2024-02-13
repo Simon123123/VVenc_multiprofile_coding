@@ -75,6 +75,10 @@ int main(int argc, char* argv[])
 #if VVENC_ORACLE
    p_m = {"", "", 0, 0, ""};
 #endif
+
+#if VVENC_MULTI_RESO
+   multireso = 1;
+#endif
   vvenc_set_logging_callback( nullptr, msgFnc ); // register global log callback ( deprecated, will be removed)
 
   std::string simdOpt;

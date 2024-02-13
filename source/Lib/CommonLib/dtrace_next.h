@@ -214,6 +214,10 @@ void dtrace_frame_blockwise( CDTrace *trace_ctx, DTRACE_CHANNEL channel, Tsrc *b
 #define DTRACE_UPDATE(ctx,s)                 if((ctx)){(ctx)->update((s));}
 #define DTRACE_REPEAT(ctx,channel,times,...) ctx->dtrace_repeat( channel, times,__VA_ARGS__ )
 #define DTRACE_COND(cond,ctx,channel,...)    { if( cond ) ctx->dtrace<true>( channel, __VA_ARGS__ ); }
+
+#if VVENC_MULTI_RESO
+#define DTRACE_COND_(cond,ctx,channel,...)    { if( cond ) ctx->dtrace<true>( channel, __VA_ARGS__ ); }
+#endif
 #define DTRACE_BLOCK(...)                    dtrace_block(__VA_ARGS__)
 #define DTRACE_FRAME_BLOCKWISE(...)          dtrace_frame_blockwise(__VA_ARGS__)
 #define DTRACE_GET_COUNTER(ctx,channel)      ctx->getChannelCounter(channel)

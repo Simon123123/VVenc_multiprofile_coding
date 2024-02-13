@@ -15,3 +15,14 @@ deploy
 /out/
 .project
 .cproject
+.vcxproj
+.filters
+/source/APP
+.cmake
+/source/Lib/vvenc/CMakeFiles/
+/source/App/vvencFFapp/CMakeFiles/
+/test/
+/vvenc/
+/CMakeFiles/
+.pc
+

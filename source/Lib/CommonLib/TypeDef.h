@@ -86,10 +86,13 @@ namespace vvenc {
 #define VALGRIND_MEMCLEAR(_ref,_size)
 #endif
 
-#define VVENC_STAT										  0
+#define VVENC_STAT										  1
 
 #if VVENC_STAT
 #define VVENC_CTU										  0 
+#define VVENC_MULTI_RESO                                  1
+#define VVENC_QT_SHORTCUT_DIS                             1
+
 #endif
 
 
