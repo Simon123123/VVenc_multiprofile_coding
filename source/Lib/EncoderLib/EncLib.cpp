@@ -57,10 +57,16 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "PreProcess.h"
 #include "EncGOP.h"
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO
 #include <string>
 para_metrics p_m;
 #endif
+
+#if VVENC_ORACLE && VVENC_MULTI_RESO
+#include <string>
+para_mr p_m;
+#endif
+
 
 #if VVENC_MULTI_RESO
 int multireso;

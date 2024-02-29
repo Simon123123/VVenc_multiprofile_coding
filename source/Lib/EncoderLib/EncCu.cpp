@@ -715,7 +715,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 #endif
 
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO
 
 	bool check_ns = true;
 	int posx_cu = partitioner.currArea().lx();
@@ -834,6 +834,25 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 	
 	fclose(cu_rdo_trace);
 #endif
+
+
+
+#if VVENC_ORACLE && VVENC_MULTI_RESO
+    bool check_ns = true;
+    int posx_cu = partitioner.currArea().lx();
+    int posy_cu = partitioner.currArea().ly();
+
+    int width_cu = partitioner.currArea().lwidth();
+    int height_cu = partitioner.currArea().lheight();
+
+
+
+
+#endif
+
+
+
+
 
 
 #if VVENC_ORACLE

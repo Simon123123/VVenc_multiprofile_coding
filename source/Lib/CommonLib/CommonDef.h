@@ -119,7 +119,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \ingroup CommonLib
 //! \{
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO	
 
 #include <string>
 
@@ -134,6 +134,21 @@ typedef struct para_metrics{
 extern para_metrics p_m;
 
 #endif
+
+
+#if VVENC_ORACLE && VVENC_MULTI_RESO	
+
+#include <string>
+
+typedef struct para_mr {
+    std::string mr_path;
+    std::string inp_f;
+} para_mr;
+
+extern para_mr p_m;
+
+#endif
+
 
 
 #if VVENC_MULTI_RESO

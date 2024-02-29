@@ -159,9 +159,14 @@ void Partitioner::copyState( const Partitioner& other )
   m_currArea  = other.m_currArea;
 #endif
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO
   metric_map_ctu = other.metric_map_ctu;
 #endif
+
+#if VVENC_ORACLE && VVENC_MULTI_RESO
+  metric_map_mr = other.metric_map_mr;
+#endif
+
 
 }
 
@@ -292,8 +297,10 @@ void Partitioner::setMaxMinDepth( unsigned& minDepth, unsigned& maxDepth, const 
 }
 
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO
 void Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const shape_map& sm, int videoWidth, int videoHeight)
+#elif VVENC_MULTI_RESO
+void Partitioner::initCtu(const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const split_map& sm, int videoWidth, int videoHeight)
 #else
 void  Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice )
 #endif
@@ -302,7 +309,7 @@ void  Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, 
   m_currArea = ctuArea;
 #endif
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO
   int s_ctu = slice.sps->CTUSize;
   int dim_w = videoWidth / s_ctu;
   int dim_h = videoHeight / s_ctu;
@@ -316,6 +323,26 @@ void  Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, 
   }
 
 #endif
+
+
+#if VVENC_ORACLE && VVENC_MULTI_RESO
+  int s_ctu = slice.sps->CTUSize;
+  int dim_w = videoWidth / s_ctu / multireso;
+  int dim_h = videoHeight / s_ctu / multireso;
+
+  if (_chType == CH_L && ctuArea.lx() < dim_w * s_ctu / multireso && ctuArea.ly() < dim_h * s_ctu / multireso) {
+
+      int ind_w = int(ctuArea.lx() / s_ctu / multireso);
+      int ind_h = int(ctuArea.ly() / s_ctu / multireso);
+
+      metric_map_mr = sm[slice.poc][ind_h][ind_w];
+  }
+
+#endif
+
+
+
+
 
   currDepth   = 0;
   currTrDepth = 0;

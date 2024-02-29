@@ -72,9 +72,14 @@ POSSIBILITY OF SUCH DAMAGE.
 int main(int argc, char* argv[])
 {
 
-#if VVENC_ORACLE
+#if VVENC_ORACLE && !VVENC_MULTI_RESO
    p_m = {"", "", 0, 0, ""};
 #endif
+
+#if VVENC_ORACLE && VVENC_MULTI_RESO
+   p_m = { "", ""};
+#endif
+
 
 #if VVENC_MULTI_RESO
    multireso = 1;

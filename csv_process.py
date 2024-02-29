@@ -16,11 +16,12 @@ def main(argv):
     height = 1080
     num_f = 1
     path = '.'
+    mr = 1
     ctu_size = 128
     try:
-        opts, args = getopt.getopt(argv,"w:h:f:p:", ["ctu_size="])
+        opts, args = getopt.getopt(argv,"w:h:f:p:m:", ["ctu_size="])
     except getopt.GetoptError:
-        print ('csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files> --ctu_size <ctu size>')
+        print ('csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files> -m <scale_multi_reso> --ctu_size <ctu size>')
         sys.exit(2)
     for opt, arg in opts:      
         if opt == "-w":
@@ -31,6 +32,8 @@ def main(argv):
             num_f = int(arg)
         elif opt == '-p':
             path = arg
+        elif opt == '-m':
+            mr = int(arg)            
         elif opt == '--ctu_size':
             ctu_size = int(arg)
             
@@ -43,6 +46,14 @@ def main(argv):
     dim_w = int(width/ctu_size)
     
     dim_h = int(height/ctu_size)
+
+    size_mr = ctu_size/mr
+    bord_w_mr = int(width/size_mr)*size_mr
+    bord_h_mr = int(height/size_mr)*size_mr
+
+    dim_w_mr = int(width/size_mr)
+    dim_h_mr = int(height/size_mr)    
+
     
 
     list_files_trace = []
@@ -69,7 +80,7 @@ def main(argv):
     
         size_qt = int(ctu_size / 16)
         size_mt = int(ctu_size / 4)
-        
+          
         
         qt_map = np.empty((num_f, dim_h, dim_w, 1, size_qt, size_qt), dtype=np.int8)
     
@@ -87,6 +98,13 @@ def main(argv):
     
         cushape_map.fill(-1)
     
+        size_mt_mr = int(size_mr / 4)             
+        
+        split_map = np.empty((num_f, dim_h_mr, dim_w_mr, 1, size_mt_mr, size_mt_mr), dtype=np.int32)
+    
+        split_map.fill(-1)
+    
+    
         
         print(os.path.join(os.path.dirname(filename), 'qt_map_{}.npy'.format(filename)))        
         
@@ -101,75 +119,121 @@ def main(argv):
             ind_h = int(r[2] / ctu_size)
             ind_w = int(r[1] / ctu_size)
             
+   
+            
+            
             ind_poc = int(r[0])
             
-            ref_x_qt = int((r[1] % ctu_size) / 16)
-            ref_y_qt = int((r[2] % ctu_size) / 16)
+            # ref_x_qt = int((r[1] % ctu_size) / 16)
+            # ref_y_qt = int((r[2] % ctu_size) / 16)
 
-            ref_x_mt = int((r[1] % ctu_size) / 4)
-            ref_y_mt = int((r[2] % ctu_size) / 4)
+            # ref_x_mt = int((r[1] % ctu_size) / 4)
+            # ref_y_mt = int((r[2] % ctu_size) / 4)
             
 
-            if (r[1] + r[3]) % ctu_size == 0:
-                dx_qt = size_qt - ref_x_qt
-                dx_mt = size_mt - ref_x_mt
-            else:    
-                dx_mt = int(((r[1] + r[3]) % ctu_size) / 4) - ref_x_mt
-                dx_qt = int(((r[1] + r[3] + 12) % ctu_size) / 16) - ref_x_qt
+
+
+
+            # if (r[1] + r[3]) % ctu_size == 0:
+            #     dx_qt = size_qt - ref_x_qt
+            #     dx_mt = size_mt - ref_x_mt
+            # else:    
+            #     dx_mt = int(((r[1] + r[3]) % ctu_size) / 4) - ref_x_mt
+            #     dx_qt = int(((r[1] + r[3] + 12) % ctu_size) / 16) - ref_x_qt
                 
-            if (r[2] + r[4]) % ctu_size == 0:   
-                dy_qt = size_qt - ref_y_qt
-                dy_mt = size_mt - ref_y_mt
+            # if (r[2] + r[4]) % ctu_size == 0:   
+            #     dy_qt = size_qt - ref_y_qt
+            #     dy_mt = size_mt - ref_y_mt
 
-            else:
-                dy_qt = int(((r[2] + r[4] + 12) % ctu_size) / 16) - ref_y_qt
-                dy_mt = int(((r[2] + r[4]) % ctu_size) / 4) - ref_y_mt
+            # else:
+            #     dy_qt = int(((r[2] + r[4] + 12) % ctu_size) / 16) - ref_y_qt
+            #     dy_mt = int(((r[2] + r[4]) % ctu_size) / 4) - ref_y_mt
 
 
-            for i in range(dx_qt):
-                for j in range(dy_qt):
-                    assert (qt_map[ind_poc, ind_h, ind_w, :, ref_y_qt + j, ref_x_qt + i] == -1 or qt_map[ind_poc, ind_h, ind_w, :, ref_y_qt + j, ref_x_qt + i] == r[7]), "The qt size is not coherent"
-                    qt_map[ind_poc, ind_h, ind_w, :, ref_y_qt + j, ref_x_qt + i] = r[7] 
+
+            # for i in range(dx_qt):
+            #     for j in range(dy_qt):
+            #         assert (qt_map[ind_poc, ind_h, ind_w, :, ref_y_qt + j, ref_x_qt + i] == -1 or qt_map[ind_poc, ind_h, ind_w, :, ref_y_qt + j, ref_x_qt + i] == r[7]), "The qt size is not coherent"
+            #         qt_map[ind_poc, ind_h, ind_w, :, ref_y_qt + j, ref_x_qt + i] = r[7] 
             
             
-            for i in range(dx_mt):
-                for j in range(dy_mt):
+            # for i in range(dx_mt):
+            #     for j in range(dy_mt):
 
 
-                    assert (mtdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] == -1), "The mtdepth is not coherent"
-                    assert (btdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] == -1), "The btdepth is not coherent"
+            #         assert (mtdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] == -1), "The mtdepth is not coherent"
+            #         assert (btdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] == -1), "The btdepth is not coherent"
                     
-                    assert (cushape_map[ind_poc, ind_h, ind_w, 0, ref_y_mt + j, ref_x_mt + i] == -1), "The cushape is not coherent"
+            #         assert (cushape_map[ind_poc, ind_h, ind_w, 0, ref_y_mt + j, ref_x_mt + i] == -1), "The cushape is not coherent"
 
-                    mtdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] = r[8] 
-                    btdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] = r[9]
-                    cushape_map[ind_poc, ind_h, ind_w, 0, ref_y_mt + j, ref_x_mt + i] = r[3] 
-                    cushape_map[ind_poc, ind_h, ind_w, 1, ref_y_mt + j, ref_x_mt + i] = r[4]
+            #         mtdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] = r[8] 
+            #         btdepth_map[ind_poc, ind_h, ind_w, :, ref_y_mt + j, ref_x_mt + i] = r[9]
+            #         cushape_map[ind_poc, ind_h, ind_w, 0, ref_y_mt + j, ref_x_mt + i] = r[3] 
+            #         cushape_map[ind_poc, ind_h, ind_w, 1, ref_y_mt + j, ref_x_mt + i] = r[4]
                     
 
+            
+            if mr > 1:
+                
+                if r[1] >= bord_w_mr or r[2] >= bord_h_mr:
+                    continue
+                
 
-        np.save( os.path.join(os.path.dirname(f), 'qt_map_{}.npy'.format(filename)), qt_map)
+                
+                ind_h_mr = int(r[2] / size_mr)
+                ind_w_mr = int(r[1] / size_mr)                     
+
+                ref_x_mt_mr = int((r[1] % size_mr) / 4)
+                ref_y_mt_mr = int((r[2] % size_mr) / 4)   
+
+                if (r[1] + r[3]) % size_mr == 0:
+                    dx_mt_mr = size_mt_mr - ref_x_mt_mr
+                else:    
+                    dx_mt_mr = int(((r[1] + r[3]) % size_mr) / 4) - ref_x_mt_mr
+                    
+                if (r[2] + r[4]) % size_mr == 0:   
+                    dy_mt_mr = size_mt_mr - ref_y_mt_mr
     
-        np.save( os.path.join(os.path.dirname(f), 'mtdepth_map_{}.npy'.format(filename)), mtdepth_map)
+                else:
+                    dy_mt_mr = int(((r[2] + r[4]) % size_mr) / 4) - ref_y_mt_mr
+
+
+                for i in range(dx_mt_mr):
+                    for j in range(dy_mt_mr):
+
+                        assert (split_map[ind_poc, ind_h_mr, ind_w_mr, 0, ref_y_mt_mr + j, ref_x_mt_mr + i] == -1), "The splitserie is not coherent"
     
-        np.save( os.path.join(os.path.dirname(f), 'btdepth_map_{}.npy'.format(filename)), btdepth_map)    
+                        split_map[ind_poc, ind_h_mr, ind_w_mr, 0, ref_y_mt_mr + j, ref_x_mt_mr + i] = r[5] 
+
+
+
+        split_map = split_map.reshape(-1, size_mt_mr * size_mt_mr)
+        np.savetxt(os.path.join(path, 'Mr_part_' + str(mr) + '_' + filename + '.csv'), split_map, fmt='%d', delimiter=';')
+            
+                    
+
+        # np.save( os.path.join(os.path.dirname(f), 'qt_map_{}.npy'.format(filename)), qt_map)
+    
+        # np.save( os.path.join(os.path.dirname(f), 'mtdepth_map_{}.npy'.format(filename)), mtdepth_map)
+    
+        # np.save( os.path.join(os.path.dirname(f), 'btdepth_map_{}.npy'.format(filename)), btdepth_map)    
         
-        np.save( os.path.join(os.path.dirname(f), 'cushape_map_{}.npy'.format(filename)), cushape_map)        
+        # np.save( os.path.join(os.path.dirname(f), 'cushape_map_{}.npy'.format(filename)), cushape_map)        
         
 
     
     
-        if -1 in qt_map:
-            raise Exception('-1 value is in QTdepth map')
+        # if -1 in qt_map:
+        #     raise Exception('-1 value is in QTdepth map')
     
-        if -1 in mtdepth_map:
-            raise Exception('-1 value is in mtdepth map')
+        # if -1 in mtdepth_map:
+        #     raise Exception('-1 value is in mtdepth map')
     
-        if -1 in btdepth_map:
-            raise Exception('-1 value is in btdepth map')
+        # if -1 in btdepth_map:
+        #     raise Exception('-1 value is in btdepth map')
     
-        if -1 in cushape_map:
-            raise Exception('-1 value is in cushape map')
+        # if -1 in cushape_map:
+        #     raise Exception('-1 value is in cushape map')
 
 
 
