@@ -72,7 +72,7 @@ POSSIBILITY OF SUCH DAMAGE.
 int main(int argc, char* argv[])
 {
 
-#if VVENC_STAT && VVENC_MULTI_RATE
+#if !VVENC_STAT && VVENC_MULTI_RATE
    p_m = {"", "", 0, 0, ""};
 #endif
 

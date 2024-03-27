@@ -119,7 +119,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \ingroup CommonLib
 //! \{
 
-#if VVENC_STAT && VVENC_MULTI_RATE
+#if !VVENC_STAT && VVENC_MULTI_RATE
 
 #include <string>
 
