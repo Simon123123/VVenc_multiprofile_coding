@@ -853,7 +853,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 	EncTestMode encTestQt( { ETM_SPLIT_QT, ETO_STANDARD, qp, false } ), encTestBtv( { ETM_SPLIT_BT_V, ETO_STANDARD, qp, false } ), 
 		encTestBth( { ETM_SPLIT_BT_H, ETO_STANDARD, qp, false } ), encTestTth( { ETM_SPLIT_TT_H, ETO_STANDARD, qp, false } ), encTestTtv( { ETM_SPLIT_TT_V, ETO_STANDARD, qp, false } );
 
-#if VVENC_CAN_SPLIT_CHECK
+#if VVENC_MR_COND2
 	bool canqt = m_modeCtrl.trySplit( encTestQt, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_QUAD_SPLIT, cs ),
 		 canbv = m_modeCtrl.trySplit( encTestBtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_VERT_SPLIT, cs ),
 		 canbh = m_modeCtrl.trySplit( encTestBth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_HORZ_SPLIT, cs ),
@@ -877,22 +877,12 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
             sp_mr = sp_mr >> (floorLog2(p_m.mr) * SPLIT_DMULT); 
 
 //        int depth_mr =  (int)ceil(((int)log2(sp_mr) + 1.0f) / 5.0f); 
-   
 
-#if VVENC_MR_COND5
-        if ( sp_mr == partitioner.getSplitSeries() || sp_mr == 8)
-#elif VVENC_MR_COND1
-        if ( sp_mr == partitioner.getSplitSeries() || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
-#elif VVENC_MR_COND6
-        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (4 - floorLog2(p_m.mr)) ||  sp_mr == 8 )
-#elif VVENC_MR_COND7
-        if ( sp_mr == partitioner.getSplitSeries() || (width_cu < 4 * p_m.mr || height_cu < 4 * p_m.mr) ||  sp_mr == 8 )
+#if VVENC_MR_COND1
+        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (floorLog2(m_pcEncCfg->m_CTUSize) - floorLog2(partitioner.minQtSize) - floorLog2(p_m.mr)) ||  sp_mr == 8 )
+
 #elif VVENC_MR_COND2
-        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (4 - floorLog2(p_m.mr)) || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8 )
-#elif VVENC_MR_COND3
-        if ( sp_mr == partitioner.getSplitSeries() || (width_cu < 4 * p_m.mr || height_cu < 4 * p_m.mr) || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
-#elif VVENC_MR_COND4
-        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (4 - floorLog2(p_m.mr)) || (width_cu < 4 * p_m.mr || height_cu < 4 * p_m.mr) || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8 )
+        if ( sp_mr == partitioner.getSplitSeries() || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
 #endif
             check_ns = true;
 
@@ -1125,11 +1115,6 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
   uint64_t qtsplits = (1ULL << (shiftBits * SPLIT_BITS)) - 1;
   if (bestCS->area.lwidth() == sizeRegion && bestCS->area.lheight() == sizeRegion && bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_L) != nullptr && (bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_L)->splitSeries & qtsplits) == qtBits) {
 
-
-//    bool debug = (bestCS->slice->poc == 8); 
-
-//    if (debug)
-//        printf("Haha.");
 
       const CodingUnit* firstCU = bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_D);
       const CodingUnit* lastCU = firstCU;
@@ -1368,13 +1353,11 @@ void EncCu::xCheckModeSplitInternal(CodingStructure *&tempCS, CodingStructure *&
 
       if( bestSubCS->cost == MAX_DOUBLE )
       {
-//#if !VVENC_STAT
 
-#if VVENC_QT_CHECK
+#if VVENC_QT_CHECK || (!VVENC_MULTI_RESO && !VVENC_MULTI_RATE) 
         CHECK( split == CU_QUAD_SPLIT, "Split decision reusing cannot skip quad split" );
 #endif
 
-//#endif
 		tempCS->cost = MAX_DOUBLE;
         tempCS->costDbOffset = 0;
         m_CurrCtx--;
