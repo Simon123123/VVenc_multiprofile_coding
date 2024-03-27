@@ -113,7 +113,7 @@ private:
     FILE         *m_trace_file_ctu;
 #endif
 
-#if VVENC_MULTI_RESO
+#if VVENC_MULTI_RESO && VVENC_STAT
     FILE         *m_trace_file_mr;
 #endif
 
@@ -129,7 +129,7 @@ private:
 
 public:
 
-#if VVENC_MULTI_RESO
+#if VVENC_MULTI_RESO && VVENC_STAT
     CDTrace() : copy(false), m_trace_file(NULL), m_trace_file_mr(NULL) {}
 #else
     CDTrace() : copy(false), m_trace_file(NULL) {}
@@ -148,7 +148,7 @@ public:
 #if VVENC_STAT && VVENC_CTU
 	void dtrace_ctu(int poc, int posx, int posy, int stride, const int16_t* buf);
 #endif
-#if VVENC_MULTI_RESO
+#if VVENC_MULTI_RESO && VVENC_STAT
     void dtrace_multireso(const char* format, /*va_list args*/...);
 #endif
 	void dtrace_repeat( int, int i_times, const char *format, /*va_list args*/... );

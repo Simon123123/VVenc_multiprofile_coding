@@ -215,7 +215,7 @@ void dtrace_frame_blockwise( CDTrace *trace_ctx, DTRACE_CHANNEL channel, Tsrc *b
 #define DTRACE_REPEAT(ctx,channel,times,...) ctx->dtrace_repeat( channel, times,__VA_ARGS__ )
 #define DTRACE_COND(cond,ctx,channel,...)    { if( cond ) ctx->dtrace<true>( channel, __VA_ARGS__ ); }
 
-#if VVENC_MULTI_RESO
+#if VVENC_MULTI_RESO && VVENC_STAT
 #define DTRACE_COND_(cond,ctx,channel,...)    { if( cond ) ctx->dtrace<true>( channel, __VA_ARGS__ ); }
 #endif
 #define DTRACE_BLOCK(...)                    dtrace_block(__VA_ARGS__)

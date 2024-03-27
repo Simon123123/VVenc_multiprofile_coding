@@ -87,7 +87,27 @@ namespace vvenc {
 #endif
 
 #define VVENC_STAT										  0
+#define VVENC_MULTI_RATE                                  0
 #define VVENC_MULTI_RESO                                  1
+
+
+#if VVENC_MULTI_RESO
+
+#define VVENC_MR_COND1                                    0
+#define VVENC_MR_COND2                                    0
+#define VVENC_MR_COND3                                    0
+#define VVENC_MR_COND4                                    0
+#define VVENC_MR_COND5                                    0
+#define VVENC_MR_COND6                                    0
+#define VVENC_MR_COND7                                    1
+
+
+#define VVENC_SC                                          1
+#define VVENC_QT_CHECK                                    0
+#define VVENC_CAN_SPLIT_CHECK                             0
+
+#endif
+
 
 #if VVENC_STAT
 #define VVENC_CTU										  0 

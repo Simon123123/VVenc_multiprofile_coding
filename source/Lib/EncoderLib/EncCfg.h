@@ -47,12 +47,14 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "vvenc/vvencCfg.h"
 
-#define  VVENC_ORACLE				1
+
+#define  VVENC_STAT			    	0
 #define  VVENC_CU_RDO_TRACE		    0
 #define  VVENC_MULTI_RESO           1
+#define  VVENC_MULTI_RATE           0
 
 
-#if VVENC_ORACLE
+#if VVENC_MULTI_RATE || VVENC_MULTI_RESO
 #include <vector>
 #endif
 
@@ -60,13 +62,13 @@ namespace vvenc {
 
 
 
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RATE
 // the shape map is defined as follow form [poc, pos_y_ctu_frame, pos_x_ctu_frame, 2, size_map * size_map]
 typedef std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>                   shape_map;
 #endif
 
 
-#if VVENC_ORACLE && VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RESO
 // the splitseries map is defined as follow form [poc, pos_y_ctu_frame, pos_x_ctu_frame, size_map * size_map]
 typedef std::vector<std::vector<std::vector<std::vector<uint64_t>>>>                   split_map;
 #endif
@@ -85,9 +87,9 @@ struct VVEncCfg : public vvenc_config
   int  m_maxTLayer;
   int  m_bimCtuSize;
 
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RATE
   shape_map m_sh_map;
-#elif VVENC_ORACLE && VVENC_MULTI_RESO
+#elif !VVENC_STAT && VVENC_MULTI_RESO
   split_map m_sh_map;
 #endif
 

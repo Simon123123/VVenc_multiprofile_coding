@@ -644,9 +644,15 @@ bool EncModeCtrl::trySplit( const EncTestMode& encTestmode, const CodingStructur
   const PartSplit implicitSplit = partitioner.getImplicitSplit( cs );
   const bool isBoundary         = implicitSplit != CU_DONT_SPLIT;
 
+#if !VVENC_SC
+
+  return partitioner.canSplit(getPartSplit( encTestmode ), cs);
+
+#endif
+
 
 #if VVENC_QT_SHORTCUT_DIS
-  if (encTestmode.type == ETM_SPLIT_QT && partitioner.canSplit(CU_QUAD_SPLIT, cs) && partitioner.currQtDepth < Log2(multireso)) 
+  if (encTestmode.type == ETM_SPLIT_QT && partitioner.canSplit(CU_QUAD_SPLIT, cs) && partitioner.currQtDepth < Log2(p_m.mr)) 
       return true;
 #endif
 

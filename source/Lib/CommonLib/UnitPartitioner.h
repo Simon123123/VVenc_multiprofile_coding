@@ -147,11 +147,11 @@ public:
   unsigned maxTtSize;
   unsigned minQtSize;
 
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RATE
   std::vector<std::vector<uint8_t>> metric_map_ctu;
 #endif
 
-#if VVENC_ORACLE && VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RESO
   std::vector<uint64_t> metric_map_mr;
 #endif
 
@@ -165,10 +165,10 @@ public:
 
   SplitSeries getSplitSeries              () const;
   ModeTypeSeries getModeTypeSeries        () const;
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RATE
   void initCtu( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const shape_map& sm = shape_map(), int videoWidth = 0, int videoHeight = 0);
 
-#elif VVENC_ORACLE && VVENC_MULTI_RESO
+#elif !VVENC_STAT && VVENC_MULTI_RESO
   void initCtu(const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice, const split_map& sm = split_map(), int videoWidth = 0, int videoHeight = 0);
 #else
   void initCtu                            ( const UnitArea& ctuArea, const ChannelType _chType, const Slice& slice );

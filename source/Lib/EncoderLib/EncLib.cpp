@@ -57,20 +57,17 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "PreProcess.h"
 #include "EncGOP.h"
 
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if VVENC_MULTI_RATE
 #include <string>
 para_metrics p_m;
 #endif
 
-#if VVENC_ORACLE && VVENC_MULTI_RESO
+#if VVENC_MULTI_RESO
 #include <string>
 para_mr p_m;
 #endif
 
 
-#if VVENC_MULTI_RESO
-int multireso;
-#endif
 
 
 //! \ingroup EncoderLib
@@ -124,15 +121,76 @@ void EncLib::setRecYUVBufferCallback( void* ctx, vvencRecYUVBufferCallback func 
 void EncLib::initEncoderLib( const vvenc_config& encCfg )
 {
 
-#if VVENC_ORACLE
+#if !VVENC_STAT && (VVENC_MULTI_RESO || VVENC_MULTI_RATE)
 
 	std::string path = "/";
 #ifdef _WIN32
 	path = "\\";
 #endif
 
+
   std::string filepath;
   std::string filename = p_m.inp_f.substr(p_m.inp_f.find_last_of(path) + 1);
+
+  filename = filename.substr(0, filename.find("."));
+
+#endif
+
+
+
+#if VVENC_MULTI_RESO && !VVENC_STAT
+
+
+  if (p_m.mr_path.find_last_of(path) != (p_m.mr_path.length() - 1))
+	filepath = p_m.mr_path + path; 
+  else
+    filepath = p_m.mr_path;
+
+
+  filename.replace( filename.find(std::to_string(encCfg.m_SourceHeight)), std::to_string(encCfg.m_SourceHeight).length(), std::to_string(p_m.mr_height));
+  filename.replace( filename.find(std::to_string(encCfg.m_SourceWidth)), std::to_string(encCfg.m_SourceWidth).length(), std::to_string(p_m.mr_width));
+
+  p_m.mr = std::round(encCfg.m_SourceHeight / p_m.mr_height);
+
+  filepath +=  "Mr_part_mr_" + std::to_string(p_m.mr) + "_trace_" + filename + "_qp_" + std::to_string(encCfg.m_QP) + ".csv";
+  
+  std::ifstream f(filepath);
+  CHECK(!f.is_open(), "The csv file is not found!" );
+  std::string line;
+
+  int num_w = p_m.mr_width / (encCfg.m_CTUSize / p_m.mr);
+  int num_h = p_m.mr_height / (encCfg.m_CTUSize / p_m.mr);
+
+  int dim_map = (encCfg.m_CTUSize / 4 / p_m.mr)*(encCfg.m_CTUSize/ 4 / p_m.mr);
+
+
+  split_map map_sp = std::vector<std::vector<std::vector<std::vector<uint64_t>>>>(encCfg.m_framesToBeEncoded,
+    std::vector<std::vector<std::vector<uint64_t>>>(num_h,
+        std::vector<std::vector<uint64_t>>(num_w, std::vector<uint64_t>(dim_map, 0))));
+
+
+  for (int ind_f = 0; ind_f < encCfg.m_framesToBeEncoded; ind_f++){
+	 for (int ind_h = 0; ind_h < num_h; ind_h++){
+		for (int ind_w = 0; ind_w < num_w; ind_w++){
+				if (std::getline(f, line)){
+				
+					std::stringstream linestream(line);
+					std::string map;
+					std::vector <uint64_t> row;
+					while (std::getline(linestream, map, ';'))
+					  row.push_back((uint64_t)std::stoi(map));
+					CHECK(row.size() != dim_map, "The size of split map is not correct!" );
+					map_sp[ind_f][ind_h][ind_w] = row;			
+				}else{
+					THROW("The number of rows in csv file is not correct!" );
+				}
+		}	
+	}
+
+  }
+
+#elif VVENC_MULTI_RATE && !VVENC_STAT
+
   if (p_m.metric_path.find(path) < p_m.metric_path.length())
 	filepath = p_m.metric_path;	
   else
@@ -178,11 +236,20 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 
 #endif
 
+
+
   // copy config parameter
 
-#if VVENC_ORACLE
-  const_cast<VVEncCfg&>(m_encCfg).m_sh_map = map_seq;
+#if !VVENC_STAT
+
+#if VVENC_MULTI_RESO
+    const_cast<VVEncCfg&>(m_encCfg).m_sh_map = map_sp;
+#elif VVENC_MULTI_RATE
+    const_cast<VVEncCfg&>(m_encCfg).m_sh_map = map_seq;
 #endif
+
+#endif
+
   const_cast<VVEncCfg&>(m_encCfg) = encCfg;
 
 

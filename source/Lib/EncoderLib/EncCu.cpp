@@ -370,7 +370,7 @@ void EncCu::xCompressCtu( CodingStructure& cs, const UnitArea& area, const unsig
   // init the partitioning manager
   Partitioner *partitioner = &m_partitioner;
 
-#if VVENC_ORACLE
+#if !VVENC_STAT && (VVENC_MULTI_RESO || VVENC_MULTI_RATE)
   partitioner->initCtu( area, CH_L, *cs.slice, m_pcEncCfg->m_sh_map, m_pcEncCfg->m_SourceWidth, m_pcEncCfg->m_SourceHeight);
 #else
   partitioner->initCtu( area, CH_L, *cs.slice);
@@ -715,7 +715,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 #endif
 
 
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if !VVENC_STAT && VVENC_MULTI_RATE
 
 	bool check_ns = true;
 	int posx_cu = partitioner.currArea().lx();
@@ -837,8 +837,9 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 
 
 
-#if VVENC_ORACLE && VVENC_MULTI_RESO
-    bool check_ns = true;
+#if !VVENC_STAT && VVENC_MULTI_RESO
+
+    bool check_ns = false;
     int posx_cu = partitioner.currArea().lx();
     int posy_cu = partitioner.currArea().ly();
 
@@ -846,7 +847,58 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
     int height_cu = partitioner.currArea().lheight();
 
 
+    int bord_w = int(m_pcEncCfg->m_SourceWidth / m_pcEncCfg->m_CTUSize) * m_pcEncCfg->m_CTUSize;
+	int bord_h = int(m_pcEncCfg->m_SourceHeight / m_pcEncCfg->m_CTUSize) * m_pcEncCfg->m_CTUSize;
 
+	EncTestMode encTestQt( { ETM_SPLIT_QT, ETO_STANDARD, qp, false } ), encTestBtv( { ETM_SPLIT_BT_V, ETO_STANDARD, qp, false } ), 
+		encTestBth( { ETM_SPLIT_BT_H, ETO_STANDARD, qp, false } ), encTestTth( { ETM_SPLIT_TT_H, ETO_STANDARD, qp, false } ), encTestTtv( { ETM_SPLIT_TT_V, ETO_STANDARD, qp, false } );
+
+#if VVENC_CAN_SPLIT_CHECK
+	bool canqt = m_modeCtrl.trySplit( encTestQt, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_QUAD_SPLIT, cs ),
+		 canbv = m_modeCtrl.trySplit( encTestBtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_VERT_SPLIT, cs ),
+		 canbh = m_modeCtrl.trySplit( encTestBth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_HORZ_SPLIT, cs ),
+		 canth = m_modeCtrl.trySplit( encTestTth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIH_SPLIT, cs ),
+		 cantv = m_modeCtrl.trySplit( encTestTtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIV_SPLIT, cs );
+#endif
+
+	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h && partitioner.metric_map_mr[0] != 6 && partitioner.metric_map_mr[0] != 7){
+
+		int x_in_ctu = posx_cu % m_pcEncCfg->m_CTUSize;
+		int y_in_ctu = posy_cu % m_pcEncCfg->m_CTUSize;
+
+		int ind_x_mr = int(x_in_ctu / (4 * p_m.mr));
+		int ind_y_mr = int(y_in_ctu / (4 * p_m.mr));
+
+        int stride_map = int(m_pcEncCfg->m_CTUSize / (4 * p_m.mr));
+
+		SplitSeries sp_mr = partitioner.metric_map_mr[ind_y_mr * stride_map + ind_x_mr];
+
+        if (sp_mr != 8)            
+            sp_mr = sp_mr >> (floorLog2(p_m.mr) * SPLIT_DMULT); 
+
+//        int depth_mr =  (int)ceil(((int)log2(sp_mr) + 1.0f) / 5.0f); 
+   
+
+#if VVENC_MR_COND5
+        if ( sp_mr == partitioner.getSplitSeries() || sp_mr == 8)
+#elif VVENC_MR_COND1
+        if ( sp_mr == partitioner.getSplitSeries() || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
+#elif VVENC_MR_COND6
+        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (4 - floorLog2(p_m.mr)) ||  sp_mr == 8 )
+#elif VVENC_MR_COND7
+        if ( sp_mr == partitioner.getSplitSeries() || (width_cu < 4 * p_m.mr || height_cu < 4 * p_m.mr) ||  sp_mr == 8 )
+#elif VVENC_MR_COND2
+        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (4 - floorLog2(p_m.mr)) || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8 )
+#elif VVENC_MR_COND3
+        if ( sp_mr == partitioner.getSplitSeries() || (width_cu < 4 * p_m.mr || height_cu < 4 * p_m.mr) || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
+#elif VVENC_MR_COND4
+        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (4 - floorLog2(p_m.mr)) || (width_cu < 4 * p_m.mr || height_cu < 4 * p_m.mr) || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8 )
+#endif
+            check_ns = true;
+
+        }else{
+            check_ns = true;
+    }
 
 #endif
 
@@ -855,7 +907,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 
 
 
-#if VVENC_ORACLE
+#if !VVENC_STAT && (VVENC_MULTI_RESO || VVENC_MULTI_RATE)
 	if( ! isBoundary && check_ns)
 #else
     if( ! isBoundary )
@@ -1061,22 +1113,31 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
   }
 
 
-#if VVENC_MULTI_RESO
-  int sizeRegion = m_pcEncCfg->m_CTUSize / multireso;
-  int shiftBits = Log2(multireso);
+#if VVENC_MULTI_RESO && VVENC_STAT
+
+
+
+  int sizeRegion = m_pcEncCfg->m_CTUSize / p_m.mr;
+  int shiftBits = Log2(p_m.mr);
   int qtBits = 0;
   for (int i = 0; i < shiftBits; i++)
       qtBits += (CU_QUAD_SPLIT << (i * SPLIT_BITS));
   uint64_t qtsplits = (1ULL << (shiftBits * SPLIT_BITS)) - 1;
   if (bestCS->area.lwidth() == sizeRegion && bestCS->area.lheight() == sizeRegion && bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_L) != nullptr && (bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_L)->splitSeries & qtsplits) == qtBits) {
 
+
+//    bool debug = (bestCS->slice->poc == 8); 
+
+//    if (debug)
+//        printf("Haha.");
+
       const CodingUnit* firstCU = bestCS->getCU(bestCS->area.lumaPos(), CH_L, TREE_D);
       const CodingUnit* lastCU = firstCU;
 
 
       do {
-
-          g_trace_ctx->dtrace_multireso("%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;%d\n", lastCU->slice->poc, lastCU->Y().x, lastCU->Y().y, lastCU->Y().width, lastCU->Y().height, lastCU->splitSeries, lastCU->depth, lastCU->qtDepth, lastCU->mtDepth, lastCU->btDepth, lastCU->qp);
+          if (lastCU->chType ==  CH_L)
+            g_trace_ctx->dtrace_multireso("%d;%d;%d;%d;%d;%d;%d;%d;%d;%d;%d\n", lastCU->slice->poc, lastCU->Y().x, lastCU->Y().y, lastCU->Y().width, lastCU->Y().height, lastCU->splitSeries, lastCU->depth, lastCU->qtDepth, lastCU->mtDepth, lastCU->btDepth, lastCU->qp);
       
       } while (lastCU && (0 != (lastCU = lastCU->next)) && bestCS->area.contains(*lastCU));
 
@@ -1307,8 +1368,12 @@ void EncCu::xCheckModeSplitInternal(CodingStructure *&tempCS, CodingStructure *&
 
       if( bestSubCS->cost == MAX_DOUBLE )
       {
-//#if !VVENC_ORACLE
+//#if !VVENC_STAT
+
+#if VVENC_QT_CHECK
         CHECK( split == CU_QUAD_SPLIT, "Split decision reusing cannot skip quad split" );
+#endif
+
 //#endif
 		tempCS->cost = MAX_DOUBLE;
         tempCS->costDbOffset = 0;

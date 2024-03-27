@@ -59,7 +59,8 @@ def main(argv):
     list_files_trace = []
 
     for dirpath, dirnames, filenames in sorted(os.walk(path)):
-        for filename in [f for f in filenames if f.startswith("trace_")]:
+        # for filename in [f for f in filenames if f.startswith("trace_")]:
+        for filename in [f for f in filenames if f.startswith("mr_")]:            
             list_files_trace.append(os.path.join(dirpath, filename))
 
     print (list_files_trace)
@@ -102,13 +103,29 @@ def main(argv):
         
         split_map = np.empty((num_f, dim_h_mr, dim_w_mr, 1, size_mt_mr, size_mt_mr), dtype=np.int32)
     
-        split_map.fill(-1)
+        split_map.fill(6)
     
     
         
         print(os.path.join(os.path.dirname(filename), 'qt_map_{}.npy'.format(filename)))        
         
         trace =  pd.read_csv(f, delimiter=';', header = None, keep_default_na=False).to_numpy()
+
+        s_val = []
+        s_val_volation = []
+
+        forbidden_sp_lvl1 = []
+        forbidden_sp_lvl2 = []
+        
+        mask_lvl1 = (1 << 5) - 1
+        mask_lvl2 = (1 << 10) - 1
+
+        if mr == 2:
+            forbidden_sp_lvl2 = [65, 97, 129, 161]
+
+        if mr == 4:
+            forbidden_sp_lvl1 = [2, 3, 4, 5]
+            forbidden_sp_lvl2 = [65, 97, 129, 161]
 
 
         for r in trace: 
@@ -201,14 +218,32 @@ def main(argv):
                 for i in range(dx_mt_mr):
                     for j in range(dy_mt_mr):
 
-                        assert (split_map[ind_poc, ind_h_mr, ind_w_mr, 0, ref_y_mt_mr + j, ref_x_mt_mr + i] == -1), "The splitserie is not coherent"
+                        assert (split_map[ind_poc, ind_h_mr, ind_w_mr, 0, ref_y_mt_mr + j, ref_x_mt_mr + i] == 6), "The splitserie is not coherent"
     
                         split_map[ind_poc, ind_h_mr, ind_w_mr, 0, ref_y_mt_mr + j, ref_x_mt_mr + i] = r[5] 
+                        
+                        if r[5] not in s_val:
+                            s_val.append(r[5])
+
+        
 
 
+        for sp in s_val:
+            
+            for sp_w in forbidden_sp_lvl1:
+                if ((sp >> 5) & mask_lvl1) == sp_w:
+                    s_val_volation.append(sp)
+            for sp_w in forbidden_sp_lvl2:
+                if ((sp >> 5) & mask_lvl2) == sp_w:
+                    s_val_volation.append(sp)
 
+        for sp_w in s_val_volation:
+            split_map[split_map == sp_w] = 8
+        
+        print (s_val_volation)
+        print (s_val)
         split_map = split_map.reshape(-1, size_mt_mr * size_mt_mr)
-        np.savetxt(os.path.join(path, 'Mr_part_' + str(mr) + '_' + filename + '.csv'), split_map, fmt='%d', delimiter=';')
+        np.savetxt(os.path.join(path, 'Mr_part_' + filename + '.csv'), split_map, fmt='%d', delimiter=';')
             
                     
 

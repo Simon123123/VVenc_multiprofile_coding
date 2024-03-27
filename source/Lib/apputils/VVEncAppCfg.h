@@ -1115,18 +1115,33 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
     ("tracechannellist",              c->m_listTracingChannels,  "List all available tracing channels")
     ("tracerule",                     toTraceRule,               "Tracing rule (ex: \"D_CABAC:poc==8\" or \"D_REC_CB_LUMA:poc==8\")")
     ("tracefile",                     toTraceFile,               "Tracing file")
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if VVENC_STAT && VVENC_MULTI_RATE
 	("metric",                                           p_m.metric,                                          "Set metric for oracle mode, currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d")
 	("metricscale",                                      p_m.metric_scale,                                     "Set metric scale for oracle mode by pixels, should be multiple of 8")
 	("metricpath",                                       p_m.metric_path,                                      "Set the path of metric csv files")
 	("metricqp",                                         p_m.metric_qp,                                        "Set the qp metric map")
 #endif
 
-#if VVENC_MULTI_RESO
-    ("mr", multireso, "The upscale factor of encoding with multiple resolution senario, should be an integer larger than 1")
+#if VVENC_MULTI_RESO && !VVENC_STAT
 
-    ("mr_path", p_m.mr_path, "The path of folder containing multi-reso files")
+    ("mr_path", p_m.mr_path, "The path of folder containing multi-reso file")
+    
+    ("mr_width", p_m.mr_width, "The frame width of the multi-reso file")
+
+    ("mr_height", p_m.mr_height, "The frame height of the multi-reso file")
+
 #endif
+
+
+#if VVENC_MULTI_RESO && VVENC_STAT
+
+    ("mr_path", p_m.mr_path, "The output folder containing multi-reso partition file")
+    
+    ("mr", p_m.mr, "The multi-reso ratio")
+
+
+#endif
+
 
     ;
   }
@@ -1223,12 +1238,12 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
       err.warn( "Input file" ) << cErr;
     }
 
-#if VVENC_ORACLE && VVENC_MULTI_RESO
+#if VVENC_MULTI_RESO || (VVENC_STAT && VVENC_MULTI_RATE)	
     p_m.inp_f = m_inputFileName;
 #endif
 
 
-#if VVENC_ORACLE && !VVENC_MULTI_RESO
+#if VVENC_STAT && VVENC_MULTI_RATE
 	p_m.inp_f = m_inputFileName;
 	if (p_m.metric != "max_size_map_1d" && p_m.metric != "max_size_map_2d" && p_m.metric != "min_size_map_1d" && p_m.metric != "min_size_map_2d"){
 		err.error( "Oracle metric" ) << "Currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d! \n";
