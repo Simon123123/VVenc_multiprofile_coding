@@ -19,6 +19,16 @@ VVENC_MULTI_RATE			        off									 on							 off
 
 
 
+| 		              | Ref multi-rate & multi-reso encoding | Dep multi-rate encoding | Dep multi-reso encoding   |
+| -------------       |:------------------------------------:|:-----------------------:| :------------------------:|    
+|VVENC_STAT           | on 					     			 | off 					   | off	   				   |
+|VVENC_MULTI_RESO     | on					     	         | off 					   | on      				   |
+|VVENC_MULTI_RATE     | off                             	 | on 					   | off 					   |
+
+
+
+
+
 
 ## Partition Extraction:
 
