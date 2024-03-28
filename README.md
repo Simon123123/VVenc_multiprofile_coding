@@ -8,14 +8,6 @@ python script execution to achieve speed-ups.
 There are multiple macros to for ref encoding and dependent encoding. The **VVENC_STAT**, **VVENC_MULTI_RESO** and **VVENC_MULTI_RATE** are both defined in TypeDef.h and at in EncCfg.h. The different functionings of the encoder with macro setting are shown in 
 the following table.   
 
-					Ref multi-rate & multi-reso encoding   |   Dep multi-rate encoding   |   Dep multi-reso encoding   
-
-VVENC_STAT					        on 							         off 		   				 off
-
-VVENC_MULTI_RESO			        on									 off						 on
-
-VVENC_MULTI_RATE			        off									 on							 off
-
 
 
 
@@ -38,7 +30,7 @@ VVENC_MULTI_RATE			        off									 on							 off
 2. Use the following command:  
 
 ```
-./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s width**x**height -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr <ratio_between_representations> --TraceRule="D_PART_STAT:poc>=0"  > output_text_file
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr <ratio_between_representations> --TraceRule="D_PART_STAT:poc>=0"  > output_text_file
 ```
 
 For example:
@@ -90,7 +82,7 @@ The processing by script will generate two csv files: ShapeMap_xxxx.csv and Mr_p
 For multi-rate case:
 
 ```
-./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s width**x**height -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_max_or_min> --mr_qp <QP_value_ref_encoding>  > output_text_file
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_max_or_min> --mr_qp <QP_value_ref_encoding>  > output_text_file
 ```
  
 For example:
@@ -104,7 +96,7 @@ For example:
 For multi-reso case:
 
 ```
-./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s width**x**height -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_width <frame_width_ref_encoding> --mr_height <frame_height_ref_encoding>  > output_text_file
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_width <frame_width_ref_encoding> --mr_height <frame_height_ref_encoding>  > output_text_file
 ```
 
 For example:
