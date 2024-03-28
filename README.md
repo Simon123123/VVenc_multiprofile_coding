@@ -1,79 +1,107 @@
 # Fraunhofer Versatile Video Encoder (VVenC)
 
 
+This is the one of the first implemetation for multi-rate and multi-resolution fast encoding on VVenc encoder. We can leverage the reference encoding to accelerate the dependent encodings at various bitrates and resolutions respectively.
+First of all, we should do the ref encoding and collect the partition information. Then we should process the partition obtained by python scripts to get the <<CUshape map>> or <<Split map>>. Then in the dependent encodings, we load the output of 
+python script execution to achieve speed-ups.
+
+There are multiple macros to for ref encoding and dependent encoding. The **VVENC_STAT**, **VVENC_MULTI_RESO** and **VVENC_MULTI_RATE** are both defined in TypeDef.h and at in EncCfg.h. The different functionings of the encoder with macro setting are shown in 
+the following table.   
+
+					Ref multi-rate & multi-reso encoding   |   Dep multi-rate encoding   |   Dep multi-reso encoding   
+
+VVENC_STAT					        on 							         off 		   				 off
+
+VVENC_MULTI_RESO			        on									 off						 on
+
+VVENC_MULTI_RATE			        off									 on							 off
+
+
+
 
 
 ## Partition Extraction:
 
-For extracting partitions:  
 
-1. Use cmd line as: ./vvencFFapp --InputFile path_to_yuv -s 1920x1080  -fr 60 -f 64 -q 22 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b path_to_bin  --TraceFile="name_or_path_of_trace.csv"  --TraceRule="D_PART_STAT:poc>=0"  > path_to_output_txt.txt
+1. For extracting partitions for multi-rate & multi-reso senario, set the corresponding macros 
 
-2. Normally we will get two csv files for each encoding CTU_xxx.csv and trace_xxx.csv.
+2. Use the following command:  
 
-3. Put all the csv files of sequences of same resolution under a directory and then call the python script csv_process.py as follow: csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files>
-   where the -f option indicate the total number of frames encoded of frames and -p represent the path of generated partition python files (not given then generated in the same place as trace files)
+```
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s width**x**height -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr <ratio_between_representations> --TraceRule="D_PART_STAT:poc>=0"  > output_text_file
+```
 
-4. Then we will get 4 python numpy arrays: ctu.npy, qt_map.npy, mt1_map.npy and mt2_map.npy (The max depth of mt split is equal to 2 for VVenc so two mt split maps would be enough)
+For example:
 
-ctu.npy: 	store the pixels for all ctus in shape (x, 128, 128, 1): Pixel values scaled by 1024
-qt_map.npy:	store the qtmaps for all ctus in shape (x, 8, 8, 1) => The value of each element of qtmap is the depth QT for 16x16 region in CTU knowing that its value ranges from 1 to 4 for VVenc intra config
+```
+./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile E:\JVET_CTC\RaceHorses_416x240p_30Hz_iyuv.yuv -s 416x240 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr 2  --mr_height 240 --TraceRule="D_PART_STAT:poc>=0" > C:\output\ref_mr_2_RaceHorses_416x240p_30Hz_iyuv_qp_22.txt
+```
 
-mt1_map.npy:	store the mtmaps for all ctus in shape (x, 32, 32, 1) => The value of each element mtmap represents the split type of each 4x4 region at mt depth 1: 
-mt2_map.npy: 	..................................................................................................................................... at mt depth 2:
+Specically, the option --mr represents the ratio between the dependent resolution and reference resolution. For example, we use the encoding of sequence 240p to accelerate the encoding of the same sequence at 480p. In such case, the mr option should equal to 2.  
 
-              
-split types: 0 => Not split, 2 => Binary Horzontal Split, 3 => Binary Vertical Split, 4 => Tenary Horizontal Split, 5 => Tenary Vertical Split
-
+3. The output of encoding contains two files: one CSV file named as CUshape_xxxx.csv, it is the partition file for multi-rate senario. The other one named as mr_xxxx.csv is the partition file for multi-resolution senario.
 
 
 
-
-
-
-
-## Shortcut by CU size info:
+## Csv file process:
  
-Step 1: Get the trace file for encoding QP37, for this we should manually set the macro VVENC_STAT to 1 (line 91 of .\source\Lib\CommonLib\TypeDef.h) and set the macro VVENC_ORACLE to 0 (line 50 of .\source\Lib\EncoderLib\EncCfg.h) and build the release bin file
+We have wrote two python files, csv_process_multi_rate.py and csv_process_multi_reso.py respectively for multi-rate and multi-reso.
+  
+Call script csv_process_multi_rate.py as follows: 
 
-   ./vvencFFapp  --InputFile  <path_to_yuv>  -s 416x240  -fr 60 -f 8 -q 37 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b BQSquare_416x240p_60Hz_iyuv_qp37_AI.266  --TraceFile="BQSquare_416x240p_60Hz_iyuv_qp37_AI_encoder.csv"  --TraceRule="D_PART_STAT:poc>=0"   > BQSquare_416x240p_60Hz_iyuv_qp37_AI_encoder.txt
-
-Step 2: Get the cu size numpy file,  the -f option should be the number of frame contained by each csv trace file. -p should be the path containing all these csv trace files. 
+```
+python csv_process_multi_rate.py -w <width_frame> -h <height_frame> -f <number_frames> -p <path_CUshape_files> --ctu_size <ctu size>
+```
  
-python   ./csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files>
+It is worthmentioning the size of CTU differs between various coding presets for VVenc. 
+  
+Call script csv_process_multi_reso.py as follows: 
 
-Step 3: Process the cu size file to get the max/min size map, for the --path and --npy option, we should just give the path (do not specify the file name)
-
-python ./get_metric_map_from_npy.py --npy <path to the cu size numpy file>    --path  <path for the generated size map> --cell_size  <the scale of generated size map>  --metric <what kind of map we want to have>
-
-Here the cell size indicate the scale by number of pixels on which we calculate the size map. For example  --cell_size  8 means we get a max/min size value for each 8x8 region inside CTU.  The metric option has 4 possible values: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d. For example, max_size_map_1d means we will get a max value of width and height for each cell_size x cell_size region. Meanwhile, the max_size_map_2d is that we will get max maps separately for width and height, so the max map is two dimensional.
-
-Step 4: Accelerate the encoding QP22 by reading the size map, for this we should set VVENC_STAT to 0 and VVENC_ORACLE to 1 and build the release bin file
-
-   ./vvencFFapp    --InputFile  <path_to_yuv>  -s 416x240 -fr 60 -f 8 --NumPasses 1 --GOPSize 1 -ip 1 -qpa 1 -t 1 -b str.266  -q 22 --metric  max_size_map_2d  --metricscale 8 --metricpath  <path for the size map to load>  --metricqp 37 
+``` 
+python csv_process_multi_reso.py -w <width_frame> -h <height_frame> -f <number_frames> -p <path_mr_files> --ctu_size <ctu size> -m <scale_multi_reso>
+```
  
-Here the metricqp option represent the QP of encoding we want to use to speed up. metricscale is the same as cell_size of step 3. For --metricpath option, we should not specify the filename
-
-
-
-
-
-## Getting the table of comparison between reference coding and dependent coding
-
-
-python ./scripts/compare_cu_shape.py    <path_to_cushape_files>
-
-1. The cushape files are with file name started by cushape_map. These files are obtained after running the csv_process.npy.
-
-2. The format of output is like this:  
-	4x4 matrix 
-	row represents dependent coding with QP 22, 27, 32, 37
-	column represents reference coding with QP 22, 27, 32, 37  
+The option -m here corresponds the same value as --mr in the previous step. 
  
-3. each element of matrixs indicates the percentage of regions where the CU sizes of dependent encoding is smaller or equal to (both width and height) that of reference encoding   
+The processing by script will generate two csv files: ShapeMap_xxxx.csv and Mr_part_xxxx.csv respectively for multi-rate and multi-reso. 
 
 
 
+
+## Load csv files for acceleration: 
+ 
+ 
+1. Set values of macros correctly for Dep multi-rate and Dep multi-reso encodings.
+ 
+2. Build the encoder and call it as follows:
+
+
+
+For multi-rate case:
+
+```
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s width**x**height -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_max_or_min> --mr_qp <QP_value_ref_encoding>  > output_text_file
+```
+ 
+For example:
+
+```
+./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile  E:\JVET_CTC\RaceHorses_832x480p_30Hz_iyuv.yuv -s 832x480 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr_metric max --mr_qp 37  > C:\output\mr_qp37_RaceHorses_832x480p_30Hz_iyuv_qp_22.txt
+```
+
+
+
+For multi-reso case:
+
+```
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s width**x**height -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_width <frame_width_ref_encoding> --mr_height <frame_height_ref_encoding>  > output_text_file
+```
+
+For example:
+
+```
+./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile  E:\JVET_CTC\RaceHorses_832x480p_30Hz_iyuv.yuv -s 832x480 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr_width 416 --mr_height 240  > C:\output\mr_2_RaceHorses_832x480p_30Hz_iyuv_qp_22.txt
+```
 
 
 
