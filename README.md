@@ -2,7 +2,7 @@
 
 
 This is the one of the first implemetation for multi-rate and multi-resolution fast encoding on VVenc encoder. We can leverage the reference encoding to accelerate the dependent encodings at various bitrates and resolutions respectively.
-First of all, we should do the ref encoding and collect the partition information. Then we should process the partition obtained by python scripts to get the <<CUshape map>> or <<Split map>>. Then in the dependent encodings, we load the output of 
+First of all, we should do the ref encoding and collect the partition information. Then we should process the partition obtained by python scripts to get the **CUshape map** or **Split map**. Then in the dependent encodings, we load the output of 
 python script execution to achieve speed-ups.
 
 There are multiple macros to for ref encoding and dependent encoding. The **VVENC_STAT**, **VVENC_MULTI_RESO** and **VVENC_MULTI_RATE** are both defined in TypeDef.h and at in EncCfg.h. The different functionings of the encoder with macro setting are shown in 
@@ -36,10 +36,10 @@ the following table.
 For example:
 
 ```
-./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile E:\JVET_CTC\RaceHorses_416x240p_30Hz_iyuv.yuv -s 416x240 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr 2  --mr_height 240 --TraceRule="D_PART_STAT:poc>=0" > C:\output\ref_mr_2_RaceHorses_416x240p_30Hz_iyuv_qp_22.txt
+./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile E:\JVET_CTC\RaceHorses_416x240p_30Hz_iyuv.yuv -s 416x240 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr 2 --TraceRule="D_PART_STAT:poc>=0" > C:\output\ref_mr_2_RaceHorses_416x240p_30Hz_iyuv_qp_22.txt
 ```
 
-Specically, the option --mr represents the ratio between the dependent resolution and reference resolution. For example, we use the encoding of sequence 240p to accelerate the encoding of the same sequence at 480p. In such case, the mr option should equal to 2.  
+Specifically, the option --mr represents the ratio between the dependent resolution and reference resolution. For example, we use the encoding of sequence 240p to accelerate the encoding of the same sequence at 480p. In such case, the mr option should equal to 2.  
 
 3. The output of encoding contains two files: one CSV file named as CUshape_xxxx.csv, it is the partition file for multi-rate senario. The other one named as mr_xxxx.csv is the partition file for multi-resolution senario.
 

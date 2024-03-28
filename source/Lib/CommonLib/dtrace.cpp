@@ -129,7 +129,7 @@ CDTrace::CDTrace(const char* filename, vstring channel_names)
 
 #if VVENC_MULTI_RESO && VVENC_STAT
 
-    if (filename) {
+    if(filename) {
         std::string name_mr = "mr_" + std::to_string(p_m.mr) + filename;
         m_trace_file_mr = fopen(name_mr.c_str(), "w");
     }
