@@ -152,7 +152,7 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 
   p_m.mr = std::round(encCfg.m_SourceHeight / p_m.mr_height);
 
-  filepath +=  "Mr_part_mr_" + std::to_string(p_m.mr) + "_trace_" + filename + "_qp_" + std::to_string(encCfg.m_QP) + ".csv";
+  filepath +=  "Mr_part_mr_" + std::to_string(p_m.mr) + "_" + filename + "_qp_" + std::to_string(encCfg.m_QP) + ".csv";
   
   std::ifstream f(filepath);
   CHECK(!f.is_open(), "The csv file is not found!" );
@@ -191,22 +191,26 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 
 #elif VVENC_MULTI_RATE && !VVENC_STAT
 
-  if (p_m.metric_path.find(path) < p_m.metric_path.length())
-	filepath = p_m.metric_path;	
+  if (p_m.mr_path.find_last_of(path) < (p_m.mr_path.length() - 1))
+	filepath = p_m.mr_path + path; 
   else
-	filepath = p_m.metric_path + path; 
+	filepath = p_m.mr_path;	
 
-  filepath +=  p_m.metric + "_scale_" +  std::to_string(p_m.metric_scale)  + "_cushape_map_trace_" + filename.substr(0, filename.find_last_of(".")) + "_qp" + std::to_string(p_m.metric_qp) + "_RA_encoder.csv";
-  
+  filepath += "ShapeMap_" + filename.substr(0, filename.find_last_of(".")) + "_qp_" + std::to_string(p_m.mr_qp) + ".csv";
+
   std::ifstream f(filepath);
   CHECK(!f.is_open(), "The csv file is not found!" );
   std::string line;
   int num_w = encCfg.m_SourceWidth / encCfg.m_CTUSize;
   int num_h = encCfg.m_SourceHeight / encCfg.m_CTUSize;
-  int num_c = 1;
-  int num_cell = (encCfg.m_CTUSize / p_m.metric_scale) * (encCfg.m_CTUSize / p_m.metric_scale);
+  int num_c = 2;
+  int num_cell = (encCfg.m_CTUSize / 4) * (encCfg.m_CTUSize / 4);
+
+
+/*  int num_cell = (encCfg.m_CTUSize / p_m.metric_scale) * (encCfg.m_CTUSize / p_m.metric_scale);
   if (p_m.metric ==  "max_size_map_2d" || p_m.metric ==  "min_size_map_2d")
 	  num_c = 2;
+*/
   shape_map map_seq = std::vector<std::vector<std::vector<std::vector<std::vector<uint8_t>>>>>(encCfg.m_framesToBeEncoded,
     std::vector<std::vector<std::vector<std::vector<uint8_t>>>>(num_h,
         std::vector<std::vector<std::vector<uint8_t>>>(num_w, std::vector<std::vector<uint8_t>>(num_c, std::vector<uint8_t>(num_cell,0)))));

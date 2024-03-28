@@ -20,7 +20,7 @@ def main(argv):
     try:
         opts, args = getopt.getopt(argv,"w:h:f:p:m:", ["ctu_size="])
     except getopt.GetoptError:
-        print ('csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files> --ctu_size <ctu size>')
+        print ('csv_process_multi_rate.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files> --ctu_size <ctu size>')
         sys.exit(2)
     for opt, arg in opts:      
         if opt == "-w":
@@ -49,7 +49,7 @@ def main(argv):
     list_files_trace = []
 
     for dirpath, dirnames, filenames in sorted(os.walk(path)):
-        for filename in [f for f in filenames if (f.startswith("trace_") and str(width) in f and str(height) in f)]:           
+        for filename in [f for f in filenames if (f.startswith("CUshape") and str(width) in f and str(height) in f)]:           
             list_files_trace.append(os.path.join(dirpath, filename))
 
 
@@ -110,7 +110,7 @@ def main(argv):
 
  
         cushape_map = cushape_map.reshape(-1, size_mt * size_mt)
-        np.savetxt(os.path.join(path, 'ShapeMap_' + filename + '.csv'), cushape_map, fmt='%d', delimiter=';')
+        np.savetxt(os.path.join(path, 'ShapeMap_' + filename.replace("CUshape_", "") + '.csv'), cushape_map, fmt='%d', delimiter=';')
         
 
         if -1 in cushape_map:

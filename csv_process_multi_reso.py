@@ -21,7 +21,7 @@ def main(argv):
     try:
         opts, args = getopt.getopt(argv,"w:h:f:p:m:", ["ctu_size="])
     except getopt.GetoptError:
-        print ('csv_process.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files> -m <scale_multi_reso> --ctu_size <ctu size>')
+        print ('csv_process_multi_reso.py -w <width_frame> -h <height_frame> -f <number_frame> -p <path_csv_files> -m <scale_multi_reso> --ctu_size <ctu size>')
         sys.exit(2)
     for opt, arg in opts:      
         if opt == "-w":
@@ -51,7 +51,7 @@ def main(argv):
     forbidden_sp_lvl1 = []
     forbidden_sp_lvl2 = []
     
-    shift_bits = 5 * math.log2(mr)
+    shift_bits = int(5 * math.log2(mr))
     
     mask_lvl1 = (1 << 5) - 1
     mask_lvl2 = (1 << 10) - 1

@@ -69,7 +69,6 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 #include "CommonLib/CommonDef.h"
-//para_metrics p_m;
 
 
 
@@ -1116,11 +1115,18 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
     ("tracerule",                     toTraceRule,               "Tracing rule (ex: \"D_CABAC:poc==8\" or \"D_REC_CB_LUMA:poc==8\")")
     ("tracefile",                     toTraceFile,               "Tracing file")
 
+
+
+#if VVENC_MULTI_RATE && VVENC_STAT 
+    ("mr_path",                       p_m.mr_path,              "The path of folder containing output trace file")
+#endif
+
+
+
 #if VVENC_MULTI_RATE && !VVENC_STAT 
-	("metric",                                           p_m.metric,                                          "Set metric for oracle mode, currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d")
-	("metricscale",                                      p_m.metric_scale,                                     "Set metric scale for oracle mode by pixels, should be multiple of 8")
-	("metricpath",                                       p_m.metric_path,                                      "Set the path of metric csv files")
-	("metricqp",                                         p_m.metric_qp,                                        "Set the qp metric map")
+	("mr_metric",                                     p_m.metric,                                       "Set metric for oracle mode, either \"min_size_map_2d\" or \"max_size_map_2d\"")
+	("mr_path",                                       p_m.mr_path,                                      "Set the path of CUshape files")
+	("mr_qp",                                         p_m.mr_qp,                                        "Set the QP value of CUshape map")
 #endif
 
 #if VVENC_MULTI_RESO && !VVENC_STAT
@@ -1243,16 +1249,23 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
     p_m.inp_f = m_inputFileName;
 #endif
 
+#if VVENC_STAT
+    p_m.stat_qp = c->m_QP;
+#endif
+
 
 #if VVENC_MULTI_RATE && !VVENC_STAT
 	p_m.inp_f = m_inputFileName;
-	if (p_m.metric != "max_size_map_1d" && p_m.metric != "max_size_map_2d" && p_m.metric != "min_size_map_1d" && p_m.metric != "min_size_map_2d"){
+/*
+    if (p_m.metric != "max_size_map_1d" && p_m.metric != "max_size_map_2d" && p_m.metric != "min_size_map_1d" && p_m.metric != "min_size_map_2d"){
 		err.error( "Oracle metric" ) << "Currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d! \n";
 	}
-	if (p_m.metric_scale % 8 != 0 && p_m.metric_scale != 4){
-		err.error( "Oracle metric scale" ) << "Should be multiple of 8! \n";
+*/
+	if (p_m.metric != "max" && p_m.metric != "min"){
+		err.error( "Oracle metric" ) << "Currently available: max, min! \n";
 	}
-    if( p_m.metric_path.empty() )
+
+    if( p_m.mr_path.empty() )
     {
       err.error( "Metric oracle path" ) << "Should not be void! \n";
     }

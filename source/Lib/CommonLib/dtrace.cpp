@@ -152,7 +152,7 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
 #if VVENC_STAT
 
   if( filename ){
-	std::string name_file = filename;
+	std::string name_file = p_m.inp_f;
 #if VVENC_CTU
 	std::string name_ctu;
 #endif
@@ -162,11 +162,13 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
 	std::string name_trace;
 	std::string path = "/";
 #ifdef _WIN32
-	path = "/\\";
+	path = "\\";
 #endif
 
     if (p_m.mr_path.find_last_of(path) != (sizeof(p_m.mr_path) - 1))
         p_m.mr_path = p_m.mr_path + path;
+
+    name_file = name_file.substr(0, name_file.find(".yuv"));
 
 	if (name_file.find_last_of(path) == -1){
 #if VVENC_CTU
@@ -174,21 +176,25 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
 #endif
 
 #if VVENC_MULTI_RESO && VVENC_STAT
-        name_mr = p_m.mr_path + "mr_" + std::to_string(p_m.mr) + "_" + name_file;
+        name_mr = p_m.mr_path + "mr_" + std::to_string(p_m.mr) + "_" + name_file + "_qp_" + std::to_string(p_m.stat_qp) + ".csv";
 #endif
+
+        name_trace = p_m.mr_path + "CUshape_" + name_file + "_qp_" + std::to_string(p_m.stat_qp) + ".csv";
 
 	}else{
 #if VVENC_CTU
 		name_ctu = name_file.substr(0, name_file.find_last_of(path) + 1) + "CTU_" + name_file.substr(name_file.find_last_of(path) + 1);	
 #endif
-		name_trace = name_file.substr(0, name_file.find_last_of(path) + 1) + "_" + name_file.substr(name_file.find_last_of(path) + 1);	
+
+		name_trace =  p_m.mr_path + "CUshape_" + name_file.substr(name_file.find_last_of(path) + 1) + "_qp_" + std::to_string(p_m.stat_qp) + ".csv";	
+
 
 #if VVENC_MULTI_RESO && VVENC_STAT
-        name_mr = p_m.mr_path + "mr_" + std::to_string(p_m.mr) + "_" + name_file.substr(name_file.find_last_of(path) + 1);
+        name_mr = p_m.mr_path + "mr_" + std::to_string(p_m.mr) + "_" + name_file.substr(name_file.find_last_of(path) + 1) + "_qp_" + std::to_string(p_m.stat_qp) + ".csv";
 #endif	
     
     }
-	m_trace_file = fopen( name_file.c_str(), "w" );
+	m_trace_file = fopen(name_trace.c_str(), "w" );
 #if VVENC_CTU
 	m_trace_file_ctu = fopen(name_ctu.c_str(), "w");
 #endif

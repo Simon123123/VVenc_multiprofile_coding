@@ -119,15 +119,30 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \ingroup CommonLib
 //! \{
 
+#if VVENC_STAT && VVENC_MULTI_RATE
+
+#include <string>
+
+typedef struct para_metrics{
+	std::string mr_path;
+	std::string inp_f;
+    int stat_qp;
+} para_metrics;
+
+extern para_metrics p_m;
+
+#endif
+
+
+
 #if !VVENC_STAT && VVENC_MULTI_RATE
 
 #include <string>
 
 typedef struct para_metrics{
 	std::string metric;
-	std::string metric_path;
-	int metric_scale;
-	int metric_qp;
+	std::string mr_path;
+	int mr_qp;
 	std::string inp_f;
 } para_metrics;
 
@@ -161,6 +176,7 @@ typedef struct para_mr {
     int mr;
     std::string mr_path;
     std::string inp_f;
+    int stat_qp;
 } para_mr;
 
 extern para_mr p_m;

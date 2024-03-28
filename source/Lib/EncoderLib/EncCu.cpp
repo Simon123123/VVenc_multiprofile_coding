@@ -743,8 +743,8 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		int x_in_ctu = posx_cu % m_pcEncCfg->m_CTUSize;
 		int y_in_ctu = posy_cu % m_pcEncCfg->m_CTUSize;
 		std::string metric = p_m.metric;
-		int scale = p_m.metric_scale;
-		uint8_t w_val, h_val, val;
+		int scale = 4;
+		uint8_t w_val, h_val;
 
 		int start_x = x_in_ctu / scale;
 		int end_x =	(x_in_ctu + width_cu + scale - 1) / scale;
@@ -752,7 +752,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		int end_y = (y_in_ctu + height_cu + scale - 1) / scale;
 
 		int size_map = m_pcEncCfg->m_CTUSize / scale;
-
+/*
 		if (metric == "max_size_map_1d"){
 			val = 0;
 			for (int ind_y = start_y; ind_y < end_y; ind_y++){
@@ -763,17 +763,22 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 			CHECK(val < 4, "Max size for map 1d should be larger than 4!");
 			check_ns = (width_cu <= val && height_cu <= val);  
 
-		}else if (metric == "max_size_map_2d"){
-			w_val = h_val = 0;
-			for (int ind_y = start_y; ind_y < end_y; ind_y++){
-				for (int ind_x = start_x; ind_x < end_x; ind_x++){
-					w_val = std::max(w_val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
-					h_val = std::max(h_val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
-				}
+		}
+ */           
+            
+        if (metric == "max_size_map_2d"){
+		w_val = h_val = 0;
+		for (int ind_y = start_y; ind_y < end_y; ind_y++){
+			for (int ind_x = start_x; ind_x < end_x; ind_x++){
+				w_val = std::max(w_val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+				h_val = std::max(h_val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
 			}
-			CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
-			CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
-			check_ns = (width_cu <= w_val && height_cu <= h_val);
+		}
+		CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
+		CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
+		check_ns = (width_cu <= w_val && height_cu <= h_val);
+
+/*
 		}else if (metric == "min_size_map_1d"){
 			val = 255;
 			for (int ind_y = start_y; ind_y < end_y; ind_y++){
@@ -783,6 +788,8 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 			}
 			CHECK(val < 4, "Min size for map 1d should be larger than 4!");
 			check_ns = (width_cu >= val && height_cu >= val);  
+*/
+
 		}else if (metric == "min_size_map_2d"){
 			w_val = h_val = 255;
 			for (int ind_y = start_y; ind_y < end_y; ind_y++){

@@ -651,7 +651,7 @@ bool EncModeCtrl::trySplit( const EncTestMode& encTestmode, const CodingStructur
 #endif
 
 
-#if VVENC_QT_SHORTCUT_DIS
+#if VVENC_QT_SHORTCUT_DIS && VVENC_MULTI_RESO
   if (encTestmode.type == ETM_SPLIT_QT && partitioner.canSplit(CU_QUAD_SPLIT, cs) && partitioner.currQtDepth < Log2(p_m.mr)) 
       return true;
 #endif
