@@ -883,13 +883,17 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
         if (sp_mr != 8)            
             sp_mr = sp_mr >> (floorLog2(p_m.mr) * SPLIT_DMULT); 
 
-//        int depth_mr =  (int)ceil(((int)log2(sp_mr) + 1.0f) / 5.0f); 
+#if VVENC_MR_COND2
+        int depth_mr =  (int)ceil(((int)log2(sp_mr) + 1.0f) / 5.0f); 
+        int bit_mask = (1 << depth_mr * 5) - 1;  
+        auto split_test = partitioner.getSplitSeries() & bit_mask;		
+#endif
 
 #if VVENC_MR_COND1
-        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (floorLog2(m_pcEncCfg->m_CTUSize) - floorLog2(partitioner.minQtSize) - floorLog2(p_m.mr)) ||  sp_mr == 8 )
+        if ( sp_mr == partitioner.getSplitSeries() || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
 
 #elif VVENC_MR_COND2
-        if ( sp_mr == partitioner.getSplitSeries() || (!canqt && !canbh && !canbv && !canth && !cantv) || sp_mr == 8)
+        if ( sp_mr == partitioner.getSplitSeries() || partitioner.currQtDepth > (floorLog2(m_pcEncCfg->m_CTUSize) - floorLog2(partitioner.minQtSize) - floorLog2(p_m.mr)) ||  sp_mr == 8 || (partitioner.currDepth == (depth_mr + 1) &&  sp_mr == split_test ) || partitioner.currDepth <= 1 )
 #endif
             check_ns = true;
 
