@@ -82,8 +82,11 @@ The processing by script will generate two csv files: ShapeMap_xxxx.csv and Mr_p
 For multi-rate case:
 
 ```
-./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_max_or_min> --mr_qp <QP_value_ref_encoding>  > output_text_file
+./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_one_metric> --mr_qp <QP_value_ref_encoding>  > output_text_file
 ```
+
+Currently, there are four metric options available: max_2d_rm, max_2d_tl, max_1d_rm, max_1d_tl
+ 
  
 For example:
 

@@ -744,7 +744,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		int y_in_ctu = posy_cu % m_pcEncCfg->m_CTUSize;
 		std::string metric = p_m.metric;
 		int scale = 4;
-		uint8_t w_val, h_val;
+		uint8_t w_val, h_val, val;
 
 		int start_x = x_in_ctu / scale;
 		int end_x =	(x_in_ctu + width_cu + scale - 1) / scale;
@@ -766,17 +766,52 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		}
  */           
             
-        if (metric == "max_size_map_2d"){
-		w_val = h_val = 0;
-		for (int ind_y = start_y; ind_y < end_y; ind_y++){
-			for (int ind_x = start_x; ind_x < end_x; ind_x++){
-				w_val = std::max(w_val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
-				h_val = std::max(h_val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
-			}
+        if (metric == "max_2d_rm"){
+		    w_val = h_val = 0;
+		    for (int ind_y = start_y; ind_y < end_y; ind_y++){
+			    for (int ind_x = start_x; ind_x < end_x; ind_x++){
+				    w_val = std::max(w_val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+				    h_val = std::max(h_val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
+			    }
+		    }
+		    CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
+		    CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
+		    check_ns = (width_cu <= w_val && height_cu <= h_val);
+        }
+
+		else if (metric == "max_2d_tl"){
+
+		    w_val = partitioner.metric_map_ctu[0][start_y * size_map + start_x];
+		    h_val = partitioner.metric_map_ctu[1][start_y * size_map + start_x];
+
+	        CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
+	        CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
+	        check_ns = (width_cu <= w_val && height_cu <= h_val);
 		}
-		CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
-		CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
-		check_ns = (width_cu <= w_val && height_cu <= h_val);
+
+
+
+		else if (metric == "max_1d_rm"){
+	        val = 0;
+	        for (int ind_y = start_y; ind_y < end_y; ind_y++){
+		        for (int ind_x = start_x; ind_x < end_x; ind_x++){
+			        val = std::max(val, partitioner.metric_map_ctu[0][ind_y * size_map + ind_x]);
+			        val = std::max(val, partitioner.metric_map_ctu[1][ind_y * size_map + ind_x]);
+		        }
+	        }
+			CHECK(val < 4, "Max size for map 1d should be larger than 4!");
+	        check_ns = (width_cu <= val && height_cu <= val);
+		}
+
+
+		else if (metric == "max_1d_tl"){
+
+			val = std::max(partitioner.metric_map_ctu[0][start_y * size_map + start_x], partitioner.metric_map_ctu[1][start_y * size_map + start_x]);
+
+			CHECK(val < 4, "Max size for map 1d should be larger than 4!");
+	        check_ns = (width_cu <= val && height_cu <= val);
+		}
+
 
 /*
 		}else if (metric == "min_size_map_1d"){
@@ -788,9 +823,9 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 			}
 			CHECK(val < 4, "Min size for map 1d should be larger than 4!");
 			check_ns = (width_cu >= val && height_cu >= val);  
-*/
 
-		}else if (metric == "min_size_map_2d"){
+
+		else if (metric == "min_size_map_2d"){
 			w_val = h_val = 255;
 			for (int ind_y = start_y; ind_y < end_y; ind_y++){
 				for (int ind_x = start_x; ind_x < end_x; ind_x++){
@@ -803,6 +838,9 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 			check_ns = (width_cu >= w_val && height_cu >= h_val);		
 
 		}
+*/
+
+
 	}
 
 #if VVENC_CU_RDO_TRACE
@@ -860,7 +898,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 	EncTestMode encTestQt( { ETM_SPLIT_QT, ETO_STANDARD, qp, false } ), encTestBtv( { ETM_SPLIT_BT_V, ETO_STANDARD, qp, false } ), 
 		encTestBth( { ETM_SPLIT_BT_H, ETO_STANDARD, qp, false } ), encTestTth( { ETM_SPLIT_TT_H, ETO_STANDARD, qp, false } ), encTestTtv( { ETM_SPLIT_TT_V, ETO_STANDARD, qp, false } );
 
-#if VVENC_MR_COND2
+#if VVENC_MR_COND1
 	bool canqt = m_modeCtrl.trySplit( encTestQt, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_QUAD_SPLIT, cs ),
 		 canbv = m_modeCtrl.trySplit( encTestBtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_VERT_SPLIT, cs ),
 		 canbh = m_modeCtrl.trySplit( encTestBth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_HORZ_SPLIT, cs ),

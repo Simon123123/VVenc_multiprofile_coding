@@ -1261,8 +1261,8 @@ int parse( int argc, char* argv[], vvenc_config* c, std::ostream& rcOstr )
 		err.error( "Oracle metric" ) << "Currently available: max_size_map_1d, max_size_map_2d, min_size_map_1d, min_size_map_2d! \n";
 	}
 */
-	if (p_m.metric != "max" && p_m.metric != "min"){
-		err.error( "Oracle metric" ) << "Currently available: max, min! \n";
+	if (p_m.metric != "max_2d_rm" && p_m.metric != "max_2d_tl" && p_m.metric != "max_1d_rm" && p_m.metric != "max_1d_tl"){
+		err.error( "Oracle metric" ) << "Currently available: max_2d_rm, max_2d_tl, max_1d_rm, max_1d_tl ! \n";
 	}
 
     if( p_m.mr_path.empty() )
