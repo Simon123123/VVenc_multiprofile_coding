@@ -314,7 +314,7 @@ void  Partitioner::initCtu( const UnitArea& ctuArea, const ChannelType _chType, 
   int dim_w = videoWidth / s_ctu;
   int dim_h = videoHeight / s_ctu;
 
-  if ( _chType == CH_L && ctuArea.lx() < dim_w * s_ctu && ctuArea.ly() < dim_h * s_ctu){
+  if ( _chType == CH_L && ctuArea.lx() < dim_w * s_ctu && ctuArea.ly() < dim_h * s_ctu && sm.size() > 0){
 
 	  int ind_w = int(ctuArea.lx() / s_ctu);
 	  int ind_h = int(ctuArea.ly() / s_ctu);

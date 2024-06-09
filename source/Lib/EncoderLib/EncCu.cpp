@@ -738,7 +738,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		 cantv = m_modeCtrl.trySplit( encTestTtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIV_SPLIT, cs );
 	
 
-	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h){
+	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h && partitioner.metric_map_ctu.size() > 0){
 
 		int x_in_ctu = posx_cu % m_pcEncCfg->m_CTUSize;
 		int y_in_ctu = posy_cu % m_pcEncCfg->m_CTUSize;
