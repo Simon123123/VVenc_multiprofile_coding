@@ -24,19 +24,20 @@ the following table.
 
 ## Partition Extraction:
 
+Note: The name of input YUV file should contain the frame width and height (e.g. test_416x240.yuv). 
 
-1. For extracting partitions for multi-rate & multi-reso senario, set the corresponding macros 
+1. For extracting partitions for multi-rate & multi-reso senario, set VVENC_STAT to 1 (line 89 of TypeDef.h and line 51 of EncCfg.h), VVENC_MULTI_RESO to 1 and VVENC_MULTI_RATE to 0.
 
 2. Use the following command:  
 
 ```
-./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr <ratio_between_representations> --TraceRule="D_PART_STAT:poc>=0"  > output_text_file
+.\vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr <ratio_between_representations> --TraceRule="D_PART_STAT:poc>=0"  > output_text_file
 ```
 
 For example:
 
 ```
-./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile E:\JVET_CTC\RaceHorses_416x240p_30Hz_iyuv.yuv -s 416x240 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr 2 --TraceRule="D_PART_STAT:poc>=0" > C:\output\ref_mr_2_RaceHorses_416x240p_30Hz_iyuv_qp_22.txt
+.\vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile E:\JVET_CTC\RaceHorses_416x240p_30Hz_iyuv.yuv -s 416x240 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr 2 --TraceRule="D_PART_STAT:poc>=0" > C:\output\ref_mr_2_RaceHorses_416x240p_30Hz_iyuv_qp_22.txt
 ```
 
 Specifically, the option --mr represents the ratio between the dependent resolution and reference resolution. For example, we use the encoding of sequence 240p to accelerate the encoding of the same sequence at 480p. In such case, the mr option should equal to 2.  
@@ -73,7 +74,7 @@ The processing by script will generate two csv files: ShapeMap_xxxx.csv and Mr_p
 ## Load csv files for acceleration: 
  
  
-1. Set values of macros correctly for Dep multi-rate and Dep multi-reso encodings.
+1. Set values of macros correctly for Dep multi-rate and Dep multi-reso encodings (cf. above table).
  
 2. Build the encoder and call it as follows:
 
@@ -82,7 +83,7 @@ The processing by script will generate two csv files: ShapeMap_xxxx.csv and Mr_p
 For multi-rate case:
 
 ```
-./vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_one_metric> --mr_qp <QP_value_ref_encoding>  > output_text_file
+.\vvencFFapp -c <path to config file> --InputFile <path_to_yuv> -s widthxheight -fr <framerate> -f <number_frame_to_code> -q <qp> --NumPasses 1 -qpa 1 -t 1 -b <output_bin_file> --mr_path <location_output_partition> --mr_metric <choose_one_metric> --mr_qp <QP_value_ref_encoding>  > output_text_file
 ```
 
 Currently, there are four metric options available: max_2d_rm, max_2d_tl, max_1d_rm, max_1d_tl
@@ -91,7 +92,7 @@ Currently, there are four metric options available: max_2d_rm, max_2d_tl, max_1d
 For example:
 
 ```
-./vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile  E:\JVET_CTC\RaceHorses_832x480p_30Hz_iyuv.yuv -s 832x480 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr_metric max --mr_qp 37  > C:\output\mr_qp37_RaceHorses_832x480p_30Hz_iyuv_qp_22.txt
+.\vvencFFapp -c C:\Desktop\VVenc_multiprofile_coding\cfg\randomaccess_medium.cfg --InputFile  E:\JVET_CTC\RaceHorses_832x480p_30Hz_iyuv.yuv -s 832x480 -fr 30 -f 16 -q 22 --NumPasses 1 -qpa 1 -t 1 -b C:\output\out.bin  --mr_path "C:\mr_folder" --mr_metric max_2d_rm --mr_qp 37  > C:\output\mr_qp37_RaceHorses_832x480p_30Hz_iyuv_qp_22.txt
 ```
 
 
