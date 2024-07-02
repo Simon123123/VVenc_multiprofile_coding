@@ -535,6 +535,7 @@ void CABACWriter::coding_tree(const CodingStructure& cs, Partitioner& partitione
    DTRACE_COND( (isEncoding()), g_trace_ctx, D_QP, "poc=%d, x=%d, y=%d, w=%d, h=%d, qp=%d\n", cu.slice->poc, cu.Cb().x, cu.Cb().y, cu.Cb().width, cu.Cb().height, cu.qp );
   }
 
+
 #if VVENC_STAT
 
   if( cu.chType == CH_L ){

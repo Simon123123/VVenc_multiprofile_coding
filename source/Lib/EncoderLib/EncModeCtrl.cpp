@@ -644,7 +644,7 @@ bool EncModeCtrl::trySplit( const EncTestMode& encTestmode, const CodingStructur
   const PartSplit implicitSplit = partitioner.getImplicitSplit( cs );
   const bool isBoundary         = implicitSplit != CU_DONT_SPLIT;
 
-#if !VVENC_SC
+#if !VVENC_SC && VVENC_MULTI_RESO
 
   return partitioner.canSplit(getPartSplit( encTestmode ), cs);
 
