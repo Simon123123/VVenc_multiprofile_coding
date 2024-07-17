@@ -169,6 +169,7 @@ CDTrace::CDTrace( const char *filename, const dtrace_channels_t& channels )
         p_m.mr_path = p_m.mr_path + path;
 
     name_file = name_file.substr(0, name_file.find(".yuv"));
+    p_m.mr_path = "." + path;
 
 	if (name_file.find_last_of(path) == -1){
 #if VVENC_CTU
