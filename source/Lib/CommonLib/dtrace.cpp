@@ -301,7 +301,7 @@ bool _cf_ge ( int bound, int val ) { return ( val>=bound ); }
 
 int CDTrace::addRule( std::string rulestring )
 {
-    vstring chans_conds = split( rulestring, '+' );
+    vstring chans_conds = split( rulestring, ':' );
     vstring channels = split( chans_conds[0], ',' );
     vstring conditions = chans_conds.size()>1 ? split( chans_conds[1], ',' ) : vstring();
 
