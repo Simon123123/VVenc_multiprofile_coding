@@ -282,9 +282,7 @@ inline CDTrace* tracing_init( const std::string& sTracingFile, const std::string
   CDTrace *pDtrace = new CDTrace( sTracingFile, sTracingRule, channels );
   if( pDtrace->getLastError() )
   {
-
    msg.log( VVENC_WARNING, "%s\n", pDtrace->getErrMessage().c_str() );
-   msg.log( VVENC_WARNING, "%s\n", sTracingRule.c_str());
     //return NULL;
   }
 
