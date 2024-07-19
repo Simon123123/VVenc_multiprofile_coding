@@ -191,6 +191,11 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 
 #elif VVENC_MULTI_RATE && !VVENC_STAT
 
+//  std::vector<std::string>& path = vvenc::split(p_m.mr_path, "\"");
+
+  p_m.mr_path = p_m.mr_path.substr(p_m.mr_path.find_first_of("\"") + 1, p_m.mr_path.find_last_of("\"") - 1);
+
+
   if (p_m.mr_path.find_last_of(path) < (p_m.mr_path.length() - 1))
 	filepath = p_m.mr_path + path; 
   else
