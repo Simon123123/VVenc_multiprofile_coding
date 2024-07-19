@@ -86,9 +86,9 @@ namespace vvenc {
 #define VALGRIND_MEMCLEAR(_ref,_size)
 #endif
 
-#define VVENC_STAT										  1
-#define VVENC_MULTI_RATE                                  0
-#define VVENC_MULTI_RESO                                  1
+#define VVENC_STAT										  0
+#define VVENC_MULTI_RATE                                  1
+#define VVENC_MULTI_RESO                                  0
 
 
 #if VVENC_MULTI_RESO && !VVENC_STAT
