@@ -106,6 +106,10 @@ public:
   const VPS*  vps;
   const PreCalcValues* pcv;
 
+#if (VVENC_MULTI_RESO || VVENC_MULTI_RATE) && !VVENC_STAT
+  bool regionNsChecked;
+#endif
+
   CodingStructure( XUCache& unitCache, std::mutex* mutex );
   void create( const UnitArea& _unit, const bool isTopLayer, const PreCalcValues* _pcv );
   void create( const ChromaFormat _chromaFormat, const Area& _area, const bool isTopLayer );

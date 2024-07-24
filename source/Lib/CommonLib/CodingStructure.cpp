@@ -102,6 +102,13 @@ CodingStructure::CodingStructure( XUCache& unitCache, std::mutex* mutex )
   m_motionBuf = nullptr;
 
   m_numTUs = m_numCUs = 0;
+
+
+#if (VVENC_MULTI_RESO || VVENC_MULTI_RATE) && !VVENC_STAT
+  regionNsChecked = false;
+#endif
+
+
 }
 
 void CodingStructure::destroy()
@@ -687,6 +694,10 @@ void CodingStructure::destroyCoeffs()
 void CodingStructure::initSubStructure( CodingStructure& subStruct, const ChannelType _chType, const UnitArea& subArea, const bool isTuEnc, PelStorage* pOrgBuffer, PelStorage* pRspBuffer )
 {
   CHECK( this == &subStruct, "Trying to init self as sub-structure" );
+ 
+#if (VVENC_MULTI_RESO || VVENC_MULTI_RATE) && !VVENC_STAT
+   subStruct.regionNsChecked = regionNsChecked;
+#endif
 
   subStruct.parent = this;
 
@@ -757,6 +768,12 @@ void CodingStructure::initSubStructure( CodingStructure& subStruct, const Channe
 
 void CodingStructure::useSubStructure( CodingStructure& subStruct, const ChannelType chType, const TreeType _treeType, const UnitArea& subArea, const bool cpyRecoToPic )
 {
+
+
+#if (VVENC_MULTI_RESO || VVENC_MULTI_RATE) && !VVENC_STAT
+    regionNsChecked = subStruct.regionNsChecked;
+#endif
+
   UnitArea clippedArea = clipArea( subArea, *picture );
 
   CPelUnitBuf subRecoBuf = subStruct.getRecoBuf( clippedArea );
@@ -868,6 +885,11 @@ void CodingStructure::useSubStructure( CodingStructure& subStruct, const Channel
 
 void CodingStructure::copyStructure( const CodingStructure& other, const ChannelType chType, const TreeType _treeType, const bool copyTUs, const bool copyRecoBuf )
 {
+
+#if (VVENC_MULTI_RESO || VVENC_MULTI_RATE) && !VVENC_STAT
+    regionNsChecked = other.regionNsChecked;
+#endif
+
   fracBits      = other.fracBits;
   dist          = other.dist;
   cost          = other.cost;

@@ -776,7 +776,10 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		    }
 		    CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
 		    CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
-		    check_ns = (width_cu <= w_val && height_cu <= h_val);
+		    //check_ns = (width_cu <= w_val && height_cu <= h_val);
+            bool cond_sz = (width_cu >= w_val / 2 && height_cu >= h_val / 2 && width_cu <= w_val && height_cu <= h_val);
+            bool small_sz = (width_cu < w_val / 2 || height_cu < h_val / 2);
+            check_ns = cond_sz || (small_sz && !cs.parent->regionNsChecked);
         }
 
 		else if (metric == "max_2d_tl"){
@@ -786,7 +789,11 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 
 	        CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
 	        CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
-	        check_ns = (width_cu <= w_val && height_cu <= h_val);
+            //check_ns = (width_cu <= w_val && height_cu <= h_val);
+            bool cond_sz = (width_cu >= w_val / 2 && height_cu >= h_val / 2 && width_cu <= w_val && height_cu <= h_val);
+            bool small_sz = (width_cu < w_val / 2 || height_cu < h_val / 2);
+            check_ns = cond_sz || (small_sz && !cs.parent->regionNsChecked);
+
 		}
 
 
@@ -851,8 +858,11 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 	fclose(cu_rdo_trace);
 #endif
 
-	if (!canqt && !canbh && !canbv && !canth && !cantv)
+//    if (!canqt && !canbh && !canbv && !canth && !cantv)
+    if (!canqt && !canbh && !canbv && !canth && !cantv && !cs.regionNsChecked)
 		check_ns = true;
+
+    tempCS->regionNsChecked |= check_ns;
 
 #elif VVENC_CU_RDO_TRACE
 
