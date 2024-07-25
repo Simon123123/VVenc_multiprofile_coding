@@ -771,7 +771,7 @@ void CodingStructure::useSubStructure( CodingStructure& subStruct, const Channel
 
 
 #if (VVENC_MULTI_RESO || VVENC_MULTI_RATE) && !VVENC_STAT
-    regionNsChecked = subStruct.regionNsChecked;
+//    regionNsChecked = subStruct.regionNsChecked;
 #endif
 
   UnitArea clippedArea = clipArea( subArea, *picture );

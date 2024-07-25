@@ -343,7 +343,11 @@ void EncCu::encodeCtu( Picture* pic, int (&prevQP)[MAX_NUM_CH], uint32_t ctuXPos
     prevQP[CH_L] = prevQP[CH_C] = slice->sliceQp; // hlm: call CU::predictQP() here!
   }
 
+//debug
+
+  cs.regionNsChecked = false;
   xCompressCtu( cs, ctuArea, ctuRsAddr, prevQP );
+  cs.regionNsChecked = false;
 
   m_CABACEstimator->resetBits();
   m_CABACEstimator->coding_tree_unit( cs, ctuArea, prevQP, ctuRsAddr, true, true );
@@ -418,6 +422,14 @@ void EncCu::xCompressCtu( CodingStructure& cs, const UnitArea& area, const unsig
 
   // Ensure that a coding was found
   // Selected mode's RD-cost must be not MAX_DOUBLE.
+
+  //debug
+  //for (int i = 0; i < bestCS->cus.size(); i++)
+  //    printf("The encoded NS bloc is: at pos (%d, %d) with size %d x %d \n", bestCS->cus[i]->lx(), bestCS->cus[i]->ly(), bestCS->cus[i]->lwidth(), bestCS->cus[i]->lheight());
+
+  //printf("============================CTU====SEPERATOR=========================================\n");
+
+
   CHECK( bestCS->cus.empty()                                   , "No possible encoding found" );
   CHECK( bestCS->cus[0]->predMode == NUMBER_OF_PREDICTION_MODES, "No possible encoding found" );
   CHECK( bestCS->cost             == MAX_DOUBLE                , "No possible encoding found" );
@@ -717,6 +729,11 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 
 #if !VVENC_STAT && VVENC_MULTI_RATE
 
+//debug
+    bool small_sz = false;
+    bool cond_sz = false;
+    uint8_t w_val, h_val, val;
+
 	bool check_ns = true;
 	int posx_cu = partitioner.currArea().lx();
 	int posy_cu = partitioner.currArea().ly();
@@ -738,13 +755,13 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		 cantv = m_modeCtrl.trySplit( encTestTtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIV_SPLIT, cs );
 	
 
-	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h && partitioner.metric_map_ctu.size() > 0){
+	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h && partitioner.metric_map_ctu.size() > 0 && partitioner.chType == CH_L){
 
 		int x_in_ctu = posx_cu % m_pcEncCfg->m_CTUSize;
 		int y_in_ctu = posy_cu % m_pcEncCfg->m_CTUSize;
 		std::string metric = p_m.metric;
 		int scale = 4;
-		uint8_t w_val, h_val, val;
+
 
 		int start_x = x_in_ctu / scale;
 		int end_x =	(x_in_ctu + width_cu + scale - 1) / scale;
@@ -776,9 +793,9 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		    }
 		    CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
 		    CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
-		    //check_ns = (width_cu <= w_val && height_cu <= h_val);
-            bool cond_sz = (width_cu >= w_val / 2 && height_cu >= h_val / 2 && width_cu <= w_val && height_cu <= h_val);
-            bool small_sz = (width_cu < w_val / 2 || height_cu < h_val / 2);
+//		    check_ns = (width_cu <= w_val && height_cu <= h_val);
+            cond_sz = (width_cu >= w_val / 2 && height_cu >= h_val / 2 && width_cu <= w_val && height_cu <= h_val);
+            small_sz = (width_cu * height_cu < w_val* h_val);
             check_ns = cond_sz || (small_sz && !cs.parent->regionNsChecked);
         }
 
@@ -789,9 +806,9 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 
 	        CHECK(w_val < 4, "Max size 2d for width should be larger than 4!");
 	        CHECK(h_val < 4, "Max size 2d for height should be larger than 4!");
-            //check_ns = (width_cu <= w_val && height_cu <= h_val);
-            bool cond_sz = (width_cu >= w_val / 2 && height_cu >= h_val / 2 && width_cu <= w_val && height_cu <= h_val);
-            bool small_sz = (width_cu < w_val / 2 || height_cu < h_val / 2);
+//            check_ns = (width_cu <= w_val && height_cu <= h_val);
+            cond_sz = (width_cu >= w_val / 2 && height_cu >= h_val / 2 && width_cu <= w_val && height_cu <= h_val);
+            small_sz = (width_cu * height_cu < w_val*h_val);
             check_ns = cond_sz || (small_sz && !cs.parent->regionNsChecked);
 
 		}
@@ -859,10 +876,15 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 #endif
 
 //    if (!canqt && !canbh && !canbv && !canth && !cantv)
-    if (!canqt && !canbh && !canbv && !canth && !cantv && !cs.regionNsChecked)
+    if (!canqt && !canbh && !canbv && !canth && !cantv && !cs.parent->regionNsChecked)
 		check_ns = true;
 
     tempCS->regionNsChecked |= check_ns;
+    bestCS->regionNsChecked = tempCS->regionNsChecked;
+
+//debug
+
+//    check_ns = true;
 
 #elif VVENC_CU_RDO_TRACE
 
@@ -962,6 +984,10 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
     if( ! isBoundary )
 #endif
 	{
+
+//debug
+//      printf("The checked NS bloc is: at pos (%d, %d) with size %d x %d  checkcond: %d smallcond: %d parent cond: %d w_val: %d h_val: %d\n", tempCS->area.lx(), tempCS->area.ly(), tempCS->area.lwidth(), tempCS->area.lheight(), cond_sz, small_sz, tempCS->parent->regionNsChecked, w_val, h_val);
+
       if (pps.useDQP && partitioner.isSepTree (*tempCS) && isChroma (partitioner.chType))
       {
         const ChromaFormat chromaFm = tempCS->area.chromaFormat;
