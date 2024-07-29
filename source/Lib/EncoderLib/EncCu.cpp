@@ -424,10 +424,12 @@ void EncCu::xCompressCtu( CodingStructure& cs, const UnitArea& area, const unsig
   // Selected mode's RD-cost must be not MAX_DOUBLE.
 
   //debug
-  //for (int i = 0; i < bestCS->cus.size(); i++)
-  //    printf("The encoded NS bloc is: at pos (%d, %d) with size %d x %d \n", bestCS->cus[i]->lx(), bestCS->cus[i]->ly(), bestCS->cus[i]->lwidth(), bestCS->cus[i]->lheight());
+//  for (int i = 0; i < bestCS->cus.size(); i++) {
+//      if (!bestCS->cus[i]->chType)
+//          printf("The encoded NS bloc is: at pos (%d, %d) with size %d x %d \n", bestCS->cus[i]->lx(), bestCS->cus[i]->ly(), bestCS->cus[i]->lwidth(), bestCS->cus[i]->lheight());
+//  }
 
-  //printf("============================CTU====SEPERATOR=========================================\n");
+//  printf("============================CTU====SEPERATOR=========================================\n");
 
 
   CHECK( bestCS->cus.empty()                                   , "No possible encoding found" );
@@ -753,7 +755,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 		 canbh = m_modeCtrl.trySplit( encTestBth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_HORZ_SPLIT, cs ),
 		 canth = m_modeCtrl.trySplit( encTestTth, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIH_SPLIT, cs ),
 		 cantv = m_modeCtrl.trySplit( encTestTtv, cs, partitioner, encTestQt ) && partitioner.canSplit( CU_TRIV_SPLIT, cs );
-	
+
 
 	if((posx_cu + width_cu) <= bord_w  && (posy_cu + height_cu) <= bord_h && partitioner.metric_map_ctu.size() > 0 && partitioner.chType == CH_L){
 
@@ -986,6 +988,7 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
 	{
 
 //debug
+//      if ((posx_cu + width_cu) <= bord_w && (posy_cu + height_cu) <= bord_h && partitioner.metric_map_ctu.size() > 0 && !partitioner.chType)
 //      printf("The checked NS bloc is: at pos (%d, %d) with size %d x %d  checkcond: %d smallcond: %d parent cond: %d w_val: %d h_val: %d\n", tempCS->area.lx(), tempCS->area.ly(), tempCS->area.lwidth(), tempCS->area.lheight(), cond_sz, small_sz, tempCS->parent->regionNsChecked, w_val, h_val);
 
       if (pps.useDQP && partitioner.isSepTree (*tempCS) && isChroma (partitioner.chType))
@@ -1084,6 +1087,14 @@ void EncCu::xCompressCU( CodingStructure*& tempCS, CodingStructure*& bestCS, Par
           xCheckRDCostIntra( tempCS, bestCS, partitioner, encTestMode );
         }
       } // reusing cu
+
+
+#if !VVENC_STAT && VVENC_MULTI_RATE
+      
+      if (bestCS->cost == MAX_DOUBLE && tempCS->regionNsChecked && !cs.parent->regionNsChecked)
+          tempCS->regionNsChecked = bestCS->regionNsChecked = false;
+#endif
+
 
       m_modeCtrl.beforeSplit( partitioner );
 
