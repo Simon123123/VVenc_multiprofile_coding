@@ -48,10 +48,10 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "vvenc/vvencCfg.h"
 
 
-#define  VVENC_STAT			    	0
+#define  VVENC_STAT			    	1
 #define  VVENC_CU_RDO_TRACE		    0
-#define  VVENC_MULTI_RESO           0
-#define  VVENC_MULTI_RATE           1
+#define  VVENC_MULTI_RESO           1
+#define  VVENC_MULTI_RATE           0
 
 
 #if VVENC_MULTI_RATE || VVENC_MULTI_RESO
