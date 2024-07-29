@@ -345,9 +345,13 @@ void EncCu::encodeCtu( Picture* pic, int (&prevQP)[MAX_NUM_CH], uint32_t ctuXPos
 
 //debug
 
+#if VVENC_MULTI_RATE && !VVENC_STAT
   cs.regionNsChecked = false;
+#endif
   xCompressCtu( cs, ctuArea, ctuRsAddr, prevQP );
+#if VVENC_MULTI_RATE && !VVENC_STAT 
   cs.regionNsChecked = false;
+#endif
 
   m_CABACEstimator->resetBits();
   m_CABACEstimator->coding_tree_unit( cs, ctuArea, prevQP, ctuRsAddr, true, true );
