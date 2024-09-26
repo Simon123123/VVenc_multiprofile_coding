@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -275,7 +275,7 @@ class NoMallocThreadPool
     };
 
   public:
-    class Iterator : public std::iterator<std::forward_iterator_tag, Slot>
+    class Iterator
     {
       Slot*  m_slot  = nullptr;
       Chunk* m_chunk = nullptr;
@@ -339,6 +339,12 @@ class NoMallocThreadPool
       Slot& operator*() { return *m_slot; }
 
       bool isValid() const { return m_slot != nullptr && m_chunk != nullptr; }
+
+      using iterator_category = std::forward_iterator_tag;
+      using value_type        = Slot;
+      using pointer           = Slot*;
+      using reference         = Slot&;
+      using difference_type   = ptrdiff_t;
     };
 
     ChunkedTaskQueue() = default;

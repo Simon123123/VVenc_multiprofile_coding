@@ -10,10 +10,10 @@ if( NOT CMAKE_VERSION VERSION_LESS 3.13.0 )
 endif()
 
 # project name
-project( vvenc VERSION 1.7.0 )
+project( vvenc VERSION 1.12.0 )
 
 # set alternative version numbering for release candidates
-set( PROJECT_VERSION_RC rc1 )
+#set( PROJECT_VERSION_RC rc1 )
 if( PROJECT_VERSION_RC )
     set( PROJECT_VERSION "${PROJECT_VERSION}-${PROJECT_VERSION_RC}" )
 endif()
@@ -21,10 +21,41 @@ endif()
 set( CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules" )
 message( STATUS "CMAKE_MODULE_PATH: updating module path to: ${CMAKE_MODULE_PATH}" )
 
+# check for arm architecture support
+set( VVENC_ARM_SIMD_DEFAULT FALSE )
+if( ( "${CMAKE_SYSTEM_PROCESSOR}" MATCHES "aarch64\|arm"
+    OR "${CMAKE_CXX_COMPILER}" MATCHES "aarch64\|arm"
+    OR "${CMAKE_OSX_ARCHITECTURES}" MATCHES "arm64\|armv" )
+    AND NOT "${CMAKE_OSX_ARCHITECTURES}" MATCHES "x86\|x64" )
+  set( VVENC_ARM_SIMD_DEFAULT TRUE )
+endif()
+
 # we enable x86 intrinsics for all target architectures, because they are implemented through simd-everywhere on non-x86
-set( VVENC_ENABLE_X86_SIMD TRUE CACHE BOOL "enable x86 intrinsics" )
+set( VVENC_ENABLE_X86_SIMD TRUE                      CACHE BOOL "enable x86 intrinsics" )
+set( VVENC_ENABLE_ARM_SIMD ${VVENC_ARM_SIMD_DEFAULT} CACHE BOOL "enable ARM intrinsics" )
 
 include( vvencCompilerSupport )
+check_problematic_compiler( VVENC_PROBLEMATIC_COMPILER "MSVC" 19.38 19.39 )
+
+if( VVENC_PROBLEMATIC_COMPILER )
+  set( VVENC_OVERRIDE_COMPILER_CHECK      OFF        CACHE BOOL "Build with known problematic compiler version" )
+
+  if( VVENC_OVERRIDE_COMPILER_CHECK )
+    set( VVENC_PROBLEMATIC_COMPILER_MSG_TYPE     WARNING )
+    set( VVENC_PROBLEMATIC_COMPILER_MSG_OVERRIDE
+         "The performance will not be optimal due to workarounds." )
+  else()
+    set( VVENC_PROBLEMATIC_COMPILER_MSG_TYPE FATAL_ERROR )
+    set( VVENC_PROBLEMATIC_COMPILER_MSG_OVERRIDE
+         "Set -DVVENC_OVERRIDE_COMPILER_CHECK=ON to build with this compiler anyways, which enables workarounds impacting performance.")
+  endif()
+
+  message( ${VVENC_PROBLEMATIC_COMPILER_MSG_TYPE}
+          "Binaries compiled with ${CMAKE_CXX_COMPILER} version ${CMAKE_CXX_COMPILER_VERSION} are known not to behave as intended. "
+          "The problematic version range is ${VVENC_PROBLEMATIC_COMPILER_VERSION_RANGE}. Please consider using a different compiler.\n"
+          ${VVENC_PROBLEMATIC_COMPILER_MSG_OVERRIDE} )
+
+endif()
 
 # enable sse4.1 build for all source files for gcc and clang
 if( VVENC_ENABLE_X86_SIMD )
@@ -35,12 +66,17 @@ if( VVENC_ENABLE_X86_SIMD )
     add_compile_options( ${FLAG_msse41} )
   endif()
 
-  if( NOT MSVC AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Emscripten" )
+  if( NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Emscripten" )
     check_missing_intrinsics()
   endif()
 
-  set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DTARGET_SIMD_X86" )
-  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTARGET_SIMD_X86" )
+  message( STATUS "x86 SIMD intrinsics enabled (using SIMDE for non-x86 targets)" )
+  add_compile_definitions( TARGET_SIMD_X86 )
+endif()
+
+if( VVENC_ENABLE_ARM_SIMD )
+  message( STATUS "ARM SIMD intrinsics enabled" )
+  add_compile_definitions( TARGET_SIMD_ARM )
 endif()
 
 if( NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
@@ -66,12 +102,14 @@ endif()
 # enable install target
 set( VVENC_ENABLE_INSTALL                   ON  CACHE BOOL   "Enable or disable install target" )
 
-# enable postfix                                             
+# enable postfix
 set( VVENC_ENABLE_BUILD_TYPE_POSTFIX        OFF CACHE BOOL   "Enable or disable build type postfix for apps and libs" )
 
 set( VVENC_ENABLE_LINK_TIME_OPT             ON  CACHE BOOL   "Enable link time optimization for release and profile builds" )
 
 set( VVENC_ENABLE_THIRDPARTY_JSON           ON  CACHE BOOL   "Enable use of thirdparty json library" )
+
+set( VVENC_INSTALL_FULLFEATURE_APP          OFF CACHE BOOL   "Install the full-feature app: vvencFFapp" )
 
 if( CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
     CMAKE_CXX_COMPILER_ID STREQUAL "Clang" )
@@ -145,7 +183,7 @@ if( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE )
 endif()
 
-# set c++11
+# set c++14
 set( CMAKE_CXX_STANDARD 14 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON )
 
@@ -283,7 +321,7 @@ if( VVENC_ENABLE_INSTALL )
     
     set( CMAKE_INSTALL_RPATH ${RPATH_BASE} ${RPATH_BASE}/${RPATH_REL_DIR} )
     message( STATUS "CMAKE_INSTALL_RPATH=${CMAKE_INSTALL_RPATH}" )
-  endif()  
+  endif()
 endif()
 
 
@@ -293,91 +331,7 @@ add_subdirectory( "source/App/vvencFFapp" )
 add_subdirectory( "test/vvenclibtest" )
 add_subdirectory( "test/vvencinterfacetest" )
 
-# enable testing with ctest
-enable_testing()
-
-# add test
-add_test( NAME Test_vvencinterfacetest COMMAND vvencinterfacetest )
-
-add_test( NAME Test_vvenclibtest-paramerter_range        COMMAND vvenclibtest 1 )
-add_test( NAME Test_vvenclibtest-calling_order           COMMAND vvenclibtest 2 )
-add_test( NAME Test_vvenclibtest-input_params            COMMAND vvenclibtest 3 )
-add_test( NAME Test_vvenclibtest-sdk_default             COMMAND vvenclibtest 4 )
-add_test( NAME Test_vvenclibtest-sdk_stringapi_interface COMMAND vvenclibtest 5 )
-add_test( NAME Test_vvenclibtest-timestamps              COMMAND vvenclibtest 6 )
-
-set( CLEANUP_TEST_FILES "" )
-
-function( add_vvenc_test NAME TIMEOUT OUT_OUTPUT REQUIRES )
-  set( command ${ARGN} )                                    # use remaining arguments after REQUIRES as commandline
-
-  if( "OUTPUT" IN_LIST command )
-    set( out_file "out_${NAME}.vvc" )                       # generate output file name
-    list( TRANSFORM command REPLACE "OUTPUT" ${out_file} )  # substitute output file in command line
-    set( ${OUT_OUTPUT} ${out_file} PARENT_SCOPE )           # return output file name in OUT_OUTPUT parameter
-
-    set( CLEANUP_TEST_FILES "${CLEANUP_TEST_FILES};${out_file}" PARENT_SCOPE ) # collect list of output files to clean up afterwards
-  endif()
-
-
-  add_test( NAME Test_${NAME} COMMAND ${command} )
-  set_tests_properties( Test_${NAME} PROPERTIES
-                                     TIMEOUT ${TIMEOUT}
-                                     FIXTURES_REQUIRED "${REQUIRES};cleanup"
-                                     FIXTURES_SETUP "${out_file}"    # this test is the setup for the output-file
-                      )
-endfunction()
-
-add_vvenc_test( vvencapp-tooltest       90 OUT_VVC   ""                       vvencapp --preset tooltest -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 8 -o OUTPUT )
-add_vvenc_test( vvencFFapp-tooltest     60 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_tooltest.cfg -c ../../cfg/gop32.cfg -c ../../test/data/RTn23.cfg -f 8 -b OUTPUT )
-add_vvenc_test( compare_output-tooltest 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencFFapp-tooltest-Scalar     70 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_tooltest.cfg -c ../../cfg/gop32.cfg -c ../../test/data/RTn23.cfg -f 8 --SIMD=SCALAR -b OUTPUT )
-add_vvenc_test( compare_output-tooltest-Scalar 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencFFapp-tooltesttrans 20 OUT_VVC   "${OUTF_VVC}"            vvencFFapp -c ../../cfg/randomaccess_tooltest.cfg -c ../../cfg/gop32.cfg -c ../../test/data/RTn23.cfg -f 8 --DebugBitstream=${OUTF_VVC} --DebugPOC=3 -b OUTPUT )
-add_vvenc_test( output-tooltesttrans     30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-faster       30 OUT_VVC   ""                       vvencapp --preset faster -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 11 -o OUTPUT )
-add_vvenc_test( vvencFFapp-faster     30 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_faster.cfg -c ../../test/data/RTn23.cfg -f 11 -b OUTPUT )
-add_vvenc_test( compare_output-faster 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-fast       40 OUT_VVC   ""                       vvencapp --preset fast -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 8 -o OUTPUT )
-add_vvenc_test( vvencFFapp-fast     30 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_fast.cfg -c ../../test/data/RTn23.cfg -f 8 -b OUTPUT )
-add_vvenc_test( compare_output-fast 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencFFapp-transcoding 20 OUT_VVC   "${OUTF_VVC}"            vvencFFapp -c ../../cfg/randomaccess_fast.cfg -c ../../test/data/RTn23.cfg -f 8 --DebugBitstream=${OUTF_VVC} --DebugPOC=3 -b OUTPUT )
-add_vvenc_test( output-transcoding     30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-medium       30 OUT_VVC   ""                       vvencapp --preset medium -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 5 -o OUTPUT )
-add_vvenc_test( vvencFFapp-medium     30 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_medium.cfg -c ../../test/data/RTn23.cfg -f 5 -b OUTPUT )
-add_vvenc_test( compare_output-medium 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-slow       90 OUT_VVC   ""                       vvencapp --preset slow -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 3 -o OUTPUT )
-add_vvenc_test( vvencFFapp-slow     90 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_slow.cfg -c ../../test/data/RTn23.cfg -f 3 -b OUTPUT )
-add_vvenc_test( compare_output-slow 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-medium_noqpa_0thr       30 OUT_VVC   ""                       vvencapp --preset medium --qpa 0 --threads 0 -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 5 -o OUTPUT )
-add_vvenc_test( vvencFFapp-medium_noqpa_0thr     30 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_medium.cfg -c ../../test/data/RTn23.cfg -qpa 0 --WppBitEqual=0 --Threads=0 -f 5 -b OUTPUT )
-add_vvenc_test( compare_output-medium_noqpa_0thr 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencFFapp-lowdelay_medium_enc 30 OUTF_VVC  ""            vvencFFapp -c ../../cfg/experimental/lowdelay_medium.cfg -c ../../test/data/RTn23.cfg --IntraPeriod=-1 -dph 1 -f 8 -b OUTPUT )
-add_vvenc_test( vvencFFapp-lowdelay_medium_dec 30 NO_OUTPUT "${OUTF_VVC}" vvencFFapp --decode -b ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-medium_rc2p       30 OUT_VVC   ""                       vvencapp --preset medium -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 5 --Bitrate=10000 --Passes=2 -o OUTPUT )
-add_vvenc_test( vvencFFapp-medium_rc2p     30 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_medium.cfg -c ../../test/data/RTn23.cfg -f 5 --TargetBitrate=10000 --Passes=2 -b OUTPUT )
-add_vvenc_test( compare_output-medium_rc2p 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencFFapp-medium_rc2p_statsFile1_exp    30 OUTF_VVC  ""                       vvencFFapp -c ../../cfg/randomaccess_medium.cfg -c ../../test/data/RTn23.cfg -f 5 --TargetBitrate=10000 --Pass=1 --RCStatsFile=stats_exp.json -b OUTPUT )
-add_vvenc_test( vvencFFapp-medium_rc2p_statsFile2_exp    30 OUTF_VVC  "${OUTF_VVC}"            vvencFFapp -c ../../cfg/randomaccess_medium.cfg -c ../../test/data/RTn23.cfg -f 5 --TargetBitrate=10000 --Pass=2 --RCStatsFile=stats_exp.json -b OUTPUT )
-add_vvenc_test( compare_output-medium_rc2p_statsFile_exp 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_vvenc_test( vvencapp-medium_rc2p_statsFile1_easy      30 OUT_VVC   ""                       vvencapp --preset medium -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 5 --Bitrate=10000 --Pass=1 --RCStatsFile=stats_easy.json -o OUTPUT )
-add_vvenc_test( vvencapp-medium_rc2p_statsFile2_easy      30 OUT_VVC   "${OUT_VVC}"             vvencapp --preset medium -s 80x44 -r 15 -i ../../test/data/RTn23_80x44p15_f15.yuv -f 5 --Bitrate=10000 --Pass=2 --RCStatsFile=stats_easy.json -o OUTPUT )
-add_vvenc_test( compare_output-medium_rc2p_statsFile_easy 30 NO_OUTPUT "${OUT_VVC};${OUTF_VVC}" ${CMAKE_COMMAND} -E compare_files ${OUT_VVC} ${OUTF_VVC} )
-
-add_test( NAME Cleanup_remove_temp_files COMMAND ${CMAKE_COMMAND} -E remove -f ${CLEANUP_TEST_FILES} rec.yuv stats_exp.json stats_easy.json )
-set_tests_properties( Cleanup_remove_temp_files PROPERTIES FIXTURES_CLEANUP cleanup )
+include( cmake/modules/vvencTests.cmake )
 
 if( VVENC_ENABLE_INSTALL )
   # include installer

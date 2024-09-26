@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -213,7 +213,7 @@ void HLSWriter::xCodeRefPicList( const ReferencePictureList* rpl, bool isLongTer
 
     if( !rpl->isInterLayerRefPic[ii] )
     {
-      if (rpl->numberOfLongtermPictures)
+      if (isLongTermPresent)
       {
         WRITE_FLAG(!rpl->isLongtermRefPic[ii], "st_ref_pic_flag[ listIdx ][ rplsIdx ][ i ]");
       }
@@ -586,6 +586,7 @@ void HLSWriter::codeVUI( const VUI *pcVUI, const SPS* pcSPS )
   WRITE_FLAG(pcVUI->aspectRatioInfoPresent,               "aspect_ratio_info_present_flag");
   if (pcVUI->aspectRatioInfoPresent)
   {
+    WRITE_FLAG(pcVUI->aspectRatioConstantFlag,            "vui_aspect_ratio_constant_flag");   
     WRITE_CODE(pcVUI->aspectRatioIdc, 8,                  "aspect_ratio_idc" );
     if (pcVUI->aspectRatioIdc == 255)
     {
@@ -1862,7 +1863,7 @@ void HLSWriter::codeSliceHeader( const Slice* slice )
     }
 
     //Write L1 related syntax elements
-      if (!slice->pps->rpl1IdxPresent && slice->pps->rpl1IdxPresent)
+      if (slice->sps->getNumRPL(1) > 1 && slice->pps->rpl1IdxPresent)
       {
         WRITE_FLAG(slice->rplIdx[1] != -1 ? 1 : 0, "ref_pic_list_sps_flag[1]");
       }

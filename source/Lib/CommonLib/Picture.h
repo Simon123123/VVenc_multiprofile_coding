@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -110,6 +110,16 @@ protected:
   bool     m_bResetAMaxBT;
 };
 
+struct PicApsGlobal{
+  int      poc;
+  unsigned tid;
+  bool     initalized = false;
+  int      refCnt = 0;
+  ParameterSetMap<APS> apsMap;
+  PicApsGlobal( int _p ) : poc(_p), tid(MAX_UINT), apsMap( MAX_NUM_APS * MAX_NUM_APS_TYPE ) {}
+  PicApsGlobal( int _p, unsigned _t ) : poc(_p), tid(_t), apsMap( MAX_NUM_APS * MAX_NUM_APS_TYPE ) {}
+};
+
 struct Picture : public UnitArea
 {
   uint32_t margin;
@@ -193,6 +203,7 @@ public:
   const DCI*                    dci;
   ParameterSetMap<APS>          picApsMap;
   std::deque<Slice*>            slices;
+  std::vector<const Slice*>     ctuSlice;
   ReshapeData                   reshapeData;
   SEIMessages                   SEIs;
   BlkStat                       picBlkStat;
@@ -205,8 +216,8 @@ public:
   bool                          isNeededForOutput;
   bool                          isFinished;
   bool                          isLongTerm;
-  bool                          encPic;
-  bool                          writePic;
+  bool                          isFlush;
+  bool                          isInProcessList;
   bool                          precedingDRAP; // preceding a DRAP picture in decoding order
 
   const GOPEntry*               gopEntry;
@@ -229,6 +240,9 @@ public:
 
   std::vector<double>           ctuQpaLambda;
   std::vector<int>              ctuAdaptedQP;
+  int                           gopAdaptedQP; // QP offset of GOP (delta relative to base QP)
+  bool                          isSceneCutGOP;
+  bool                          isSceneCutCheckAdjQP;
   bool                          isMeanQPLimited;
   std::mutex                    wppMutex;
   int                           picInitialQP;
@@ -236,31 +250,35 @@ public:
   int16_t                       picMemorySTA;
   uint16_t                      picVisActTL0;
   uint16_t                      picVisActY;
+  uint16_t                      picSpVisAct;
   double                        psnr[MAX_NUM_COMP];
   double                        mse [MAX_NUM_COMP];
 
   StopClock                     encTime;
   bool                          isSccWeak;
   bool                          isSccStrong;
-  bool                          useScME;
-  bool                          useScMCTF;
-  bool                          useScTS;
-  bool                          useScBDPCM;
-  bool                          useScIBC;
-  bool                          useScLMCS;
-  bool                          useScSAO;
-  bool                          useScNumRefs;
-  int                           useScFastMrg;
+  bool                          useME;
+  bool                          useMCTF;
+  bool                          useTS;
+  bool                          useBDPCM;
+  bool                          useIBC;
+  bool                          useLMCS;
+  bool                          useSAO;
+  bool                          useNumRefs;
+  bool                          useSelectiveRdoq;
+  int                           useFastMrg;
   int                           useQtbttSpeedUpMode;
-  int                           seqBaseQp;
   int                           actualHeadBits;
   int                           actualTotalBits;
   EncRCPic*                     encRCPic;
+  PicApsGlobal*                 picApsGlobal;
+  PicApsGlobal*                 refApsGlobal;
 
   std::vector<SAOBlkParam>      m_sao[ 2 ];
   std::vector<uint8_t>          m_alfCtuEnabled[ MAX_NUM_COMP ];
   std::vector<short>            m_alfCtbFilterIndex;
   std::vector<uint8_t>          m_alfCtuAlternative[ MAX_NUM_COMP ];
+  std::vector<std::atomic<int>>*  m_tileColsDone = nullptr;
 
 public:
   Slice*          allocateNewSlice();

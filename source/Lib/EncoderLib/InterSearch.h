@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -193,10 +193,10 @@ struct BlkUniMvInfoBuffer
     m_uniMvListSize = 0;
   }
 
-  static const int m_uniMvListMaxSize = 15;
-  BlkUniMvInfo     m_uniMvList[m_uniMvListMaxSize];
-  int              m_uniMvListIdx;
-  int              m_uniMvListSize;
+  static constexpr int m_uniMvListMaxSize = 15;
+  BlkUniMvInfo         m_uniMvList[m_uniMvListMaxSize];
+  int                  m_uniMvListIdx;
+  int                  m_uniMvListSize;
 };
 
 class EncPicture;
@@ -377,7 +377,7 @@ protected:
   EncAffineMotion   m_affineMotion;
   PelStorage        m_tmpAffiStorage;
   Pel*              m_tmpAffiError;
-  int*              m_tmpAffiDeri[2];
+  Pel*              m_tmpAffiDeri[2];
   MotionInfo        m_subPuMiBuf[(MAX_CU_SIZE * MAX_CU_SIZE) >> (MIN_CU_LOG2 << 1)];
   // Misc.
   Pel*              m_pTempPel;
@@ -503,7 +503,7 @@ private:
                                     bool                  bBi = false
                                   );
 
-  void xTZSearch                  ( const CodingUnit&     cu,
+  void xTZSearch( const CodingUnit& cu,
                                     RefPicList            refPicList,
                                     int                   iRefIdxPred,
                                     TZSearchStruct&       cStruct,
@@ -513,7 +513,11 @@ private:
                                     const bool            bFastSettings = false
                                   );
 
-  void xSetSearchRange            ( const CodingUnit&     cu,
+  void xClipMvSearch              ( Mv& rcMv, const Position& pos, const struct Size& size, const PreCalcValues& pcv, const int ifpLines );
+
+  void xClipMvToFppLine           ( Mv& mv, const int yB, const int nH, const int ifpLines, const PreCalcValues& pcv );
+  void xCheckAndClipMvToFppLine   ( Mv& mv, const int yB, const int nH, const int ifpLines, const PreCalcValues& pcv );
+  void xSetSearchRange            ( const CodingUnit& cu,
                                     const Mv&             cMvPred,
                                     const int             iSrchRng,
                                     SearchRange&          sr                                  
@@ -579,7 +583,7 @@ private:
                                    bool                  bBi = false
                                  );
 
-  void        xEstimateAffineAMVP     ( CodingUnit& cu, AffineAMVPInfo& affineAMVPInfo, CPelUnitBuf& origBuf, RefPicList refPicList, int iRefIdx, Mv acMvPred[3], Distortion& distBiP);
+  bool        xEstimateAffineAMVP     ( CodingUnit& cu, AffineAMVPInfo& affineAMVPInfo, CPelUnitBuf& origBuf, RefPicList refPicList, int iRefIdx, Mv acMvPred[3], Distortion& distBiP);
 
   Distortion  xGetAffineTemplateCost  ( CodingUnit& cu, CPelUnitBuf& origBuf, PelUnitBuf& predBuf, Mv acMvCand[3], int iMVPIdx, int iMVPNum, RefPicList refPicList, int iRefIdx);
   void        xCopyAffineAMVPInfo     ( AffineAMVPInfo& src, AffineAMVPInfo& dst );

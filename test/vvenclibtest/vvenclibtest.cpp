@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -241,6 +241,10 @@ int testLibParameterRanges()
 
   testParamList( "DecodingRefreshType",                    vvencParams.m_DecodingRefreshType,        vvencParams, { 1, 2, 4, 5 } );
   testParamList( "DecodingRefreshType",                    vvencParams.m_DecodingRefreshType,        vvencParams, { -1,0,3,6 }, true );
+  vvencParams.m_poc0idr = true;
+  testParamList( "DecodingRefreshType",                    vvencParams.m_DecodingRefreshType,        vvencParams, { 1, 2, 5 } );
+  testParamList( "DecodingRefreshType",                    vvencParams.m_DecodingRefreshType,        vvencParams, { -1,0,3,4,6 }, true );
+  vvencParams.m_poc0idr = false;
 
   testParamList( "Level",                                  vvencParams.m_level,                      vvencParams, { 32,35,48,51,64,67,80,83,86,96,99,102 } );
   testParamList( "Level",                                  vvencParams.m_level,                      vvencParams, { 16,15,31,255,256 }, true ); // level 1 is not enough for 176x144p60 just because of the sample rate
@@ -259,8 +263,10 @@ int testLibParameterRanges()
 
   testParamList( "GOPSize",                                vvencParams.m_GOPSize,                    vvencParams, { 16,32 } );
   vvencParams.m_IntraPeriod = 1;
+  vvencParams.m_poc0idr = true;
   testParamList( "GOPSize",                                vvencParams.m_GOPSize,                    vvencParams, { 1 } );
   vvencParams.m_IntraPeriod = 32;
+  vvencParams.m_poc0idr = false;
   testParamList( "GOPSize",                                vvencParams.m_GOPSize,                    vvencParams, { -1,0,33,64,128 }, true ); //th is this intended
 
   testParamList( "Width",                                  vvencParams.m_SourceWidth,                vvencParams, { 320,1920,3840 } );
@@ -271,6 +277,10 @@ int testLibParameterRanges()
 
   testParamList( "IDRPeriod",                              vvencParams.m_IntraPeriod,                vvencParams, { -1,1,16,17,24,25,32,48,50,60, 0 } );
   testParamList( "IDRPeriod",                              vvencParams.m_IntraPeriod,                vvencParams, { -2 }, true );
+  vvencParams.m_poc0idr = true;
+  testParamList( "IDRPeriod",                              vvencParams.m_IntraPeriod,                vvencParams, { -1,1,16,17,24,25,32,48,50,60, 0 } );
+  testParamList( "IDRPeriod",                              vvencParams.m_IntraPeriod,                vvencParams, { -2 }, true );
+  vvencParams.m_poc0idr = false;
 
   testParamList( "Qp",                                     vvencParams.m_QP,                         vvencParams, { VVENC_AUTO_QP,0,1,2,3,4,51 } );
   testParamList( "Qp",                                     vvencParams.m_QP,                         vvencParams, { -2,64 }, true );
@@ -313,6 +323,8 @@ int testLibParameterRanges()
   vvencParams.m_tileRowHeight[0]   = 2;
   testParamList<bool, bool>( "PicPartition",               vvencParams.m_picPartitionFlag,           vvencParams, { 1 }, true );
 
+  vvencParams.m_tileColumnWidth[0] = 0;
+  vvencParams.m_tileRowHeight[0]   = 0;
   fillEncoderParameters( vvencParams, false );
 
   testParamList( "RPR",                                    vvencParams.m_rprEnabledFlag,             vvencParams, { -1, 0, 1 } );
@@ -966,11 +978,13 @@ static int runEncoder( vvenc_config& c, uint64_t framesToEncode )
 
   vvenc_YUVBuffer_free( yuvPicture, true );
   vvenc_accessUnit_free( AU, true );
+  vvenc_encoder_close( enc );
   return 0;
 
 fail:
   vvenc_YUVBuffer_free( yuvPicture, true );
   vvenc_accessUnit_free( AU, true );
+  vvenc_encoder_close( enc );
   return -1;
 }
 
@@ -1009,6 +1023,11 @@ int checkTimestampsDefault()
 
   framerates.clear();
   tickspersecVec.clear();
+  framerates.push_back(std::make_tuple( 25,1) );
+  framerates.push_back(std::make_tuple( 30,1) );
+  framerates.push_back(std::make_tuple( 50,1) );
+  framerates.push_back(std::make_tuple( 60,1) );
+  framerates.push_back(std::make_tuple( 120,1) );
   framerates.push_back(std::make_tuple( 25000,1001) );
   framerates.push_back(std::make_tuple( 30000,1001) );
   framerates.push_back(std::make_tuple( 60000,1001) );
@@ -1181,6 +1200,27 @@ int invalidInputInvalidPicSize( )
   return 0;
 }
 
+int invalidInputInvalidSampleRange( )
+{
+  vvenc_config vvencParams;
+  vvenc_config_default( &vvencParams );
+  fillEncoderParameters( vvencParams );
+
+  vvencYUVBuffer* pcYuvPicture = vvenc_YUVBuffer_alloc();
+  vvenc_YUVBuffer_alloc_buffer( pcYuvPicture, vvencParams.m_internChromaFormat, vvencParams.m_SourceWidth, vvencParams.m_SourceHeight );
+  fillInputPic( pcYuvPicture, 1024 );
+
+  if( 0 != inputBufTest( pcYuvPicture ))
+  {
+    vvenc_YUVBuffer_free( pcYuvPicture, false );
+    return -1;
+  }
+
+  vvenc_YUVBuffer_free( pcYuvPicture, false );
+
+  return 0;
+}
+
 int invalidInputInvalidLumaStride( )
 {
   int16_t dummy = 0;
@@ -1273,7 +1313,7 @@ int invalidldInputBuf( )
 int testInvalidInputParams()
 {
   testfunc( "invalidInputUninitialzedInputPic",              &invalidInputUninitialzedInputPic,         true );
-  testfunc( "invalidInputInvalidPicSize",                    &invalidInputInvalidPicSize,               true );
+  testfunc( "invalidInputInvalidSampleRange",                &invalidInputInvalidSampleRange,           true );
 
   testfunc( "invalidInputInvalidPicSize",                    &invalidInputInvalidPicSize,               true );
   testfunc( "invalidInputInvalidLumaStride",                 &invalidInputInvalidLumaStride,            true );

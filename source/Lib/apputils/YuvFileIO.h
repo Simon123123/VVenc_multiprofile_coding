@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -102,6 +102,10 @@ public:
     m_fileBitdepth        = std::min<unsigned>( fileBitDepth, 16 );
     m_MSBExtendedBitDepth = MSBExtendedBitDepth;
     m_bitdepthShift       = internalBitDepth - m_MSBExtendedBitDepth;
+    if( internalBitDepth == 8 && fileBitDepth == 10 && MSBExtendedBitDepth == fileBitDepth )
+    {
+      m_bitdepthShift     = 0;
+    }
     m_fileChrFmt          = fileChrFmt;
     m_bufferChrFmt        = bufferChrFmt;
     m_clipToRec709        = clipToRec709;
@@ -140,6 +144,19 @@ public:
     }
     else
     {
+      if( !cLogoFilename.empty() )
+      {
+        std::stringstream strstr;
+        if ( 0 != m_cLogoRenderer.init( cLogoFilename, m_bufferChrFmt, strstr ) )
+        {
+          if( !strstr.str().empty() )
+            m_lastError = strstr.str();
+          else
+            m_lastError = "failed to open Logo overlay renderer";
+          return -1;
+        }
+      }
+
       if( !strcmp( fileName.c_str(), "-" ) )
       {
         m_readStdin = true;
@@ -167,19 +184,6 @@ public:
         std::string headerline;
         getline(inStream, headerline);  // jump over y4m header
         m_y4mMode   = true;
-      }
-
-      if( !cLogoFilename.empty() )
-      {
-        std::stringstream strstr;
-        if ( 0 != m_cLogoRenderer.init( cLogoFilename, m_bufferChrFmt, internalBitDepth, strstr ) )
-        {
-          if( !strstr.str().empty() )
-            m_lastError = strstr.str();
-          else
-            m_lastError = "failed to open Logo overlay renderer";
-          return -1;
-        }
       }
     }
     return 0;
@@ -336,13 +340,6 @@ public:
       if ( m_bufferChrFmt == VVENC_CHROMA_400 && comp)
         continue;
 
-      if ( ! FileIOHelper::verifyYuvPlane( yuvPlane, m_fileBitdepth ) )
-      {
-        eof = true;
-        m_lastError = "Source image contains values outside the specified bit range!";
-        return -1;
-      }
-
       FileIOHelper::scaleYuvPlane( yuvPlane, yuvPlane, m_bitdepthShift, minVal, maxVal );
     }
 
@@ -400,7 +397,10 @@ public:
     for( int comp = 0; comp < numComp; comp++ )
     {
       if ( ! FileIOHelper::writeYuvPlane( m_cHandle, yuvWriteBuf.planes[ comp ], is16bit, m_fileBitdepth, m_packedYUVMode, comp, m_bufferChrFmt, m_fileChrFmt ) )
+      {
+        vvenc_YUVBuffer_free_buffer( &yuvScaled );
         return false;
+      }
     }
 
     m_packetCount++;

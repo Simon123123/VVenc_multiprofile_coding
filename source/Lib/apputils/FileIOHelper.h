@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -148,22 +148,30 @@ public:
     std::vector<std::string> vec(iter, end);
 
     bool valid=false;
+    int  infosFound = 0;
     for (auto &p : vec)
     {
       if( p == "YUV4MPEG2" ) // read file signature
       { valid = true; }
       else if( p[0] == 'W' ) // width
+      {
         cfg.m_SourceWidth = atoi( p.substr( 1 ).c_str());
+        infosFound++;
+      }
       else if( p[0] == 'H' ) // height
+      {
         cfg.m_SourceHeight = atoi( p.substr( 1 ).c_str());
+        infosFound++;
+      }
       else if( p[0] == 'F' )  // framerate,scale
       {
         size_t sep = p.find(":");
         if( sep == std::string::npos ) return -1;
         cfg.m_FrameRate  = atoi( p.substr( 1, sep-1 ).c_str());
         cfg.m_FrameScale = atoi( p.substr( sep+1 ).c_str());
+        infosFound++;
       }
-      else if( p[0] == 'A' ) // aspcet ration
+      else if( p[0] == 'A' ) // aspect ratio
       {
         size_t sep = p.find(":");
         if( sep == std::string::npos ) return -1;
@@ -188,11 +196,11 @@ public:
         }
         else
         {
-          sep = p.find("MONO");
+          sep = p.find("CMONO");
           if( sep != std::string::npos )
           {
             chromatype = "400";
-            if( p == "MONO") cfg.m_inputBitDepth[0] = 8;
+            if( p == "CMONO") cfg.m_inputBitDepth[0] = 8;
             else cfg.m_inputBitDepth[0] = atoi( p.substr( sep+5 ).c_str()); // e.g. mono10
           }
           else
@@ -217,6 +225,11 @@ public:
     if( fileName != "-" )
     {
       cfHandle.close();
+    }
+    
+    if ( infosFound < 3 )
+    {
+      valid = false;  
     }
 
     if( !valid ) return -1;

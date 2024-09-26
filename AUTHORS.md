@@ -12,3 +12,5 @@
 * Christian Stoffers, , Fraunhofer HHI
 * Gabriel Hege, , Fraunhofer HHI
 * Jens Güther, , Fraunhofer HHI
+* Florian Eisenreich, , Fraunhofer HHI
+* Hossein Pejman, , École de technologie supérieure (ÉTS)

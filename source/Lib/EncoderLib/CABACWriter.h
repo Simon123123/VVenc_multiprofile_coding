@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -157,13 +157,13 @@ public:
   void        joint_cb_cr               ( const TransformUnit&          tu,       const int cbfMask );
 
 
-  void        codeAlfCtuEnabled          ( CodingStructure& cs, ChannelType channel, AlfParam* alfParam );
-  void        codeAlfCtuEnabled          ( CodingStructure& cs, ComponentID compID, AlfParam* alfParam );
-  void        codeAlfCtuEnabledFlag      ( CodingStructure& cs, uint32_t ctuRsAddr, const int compIdx, AlfParam* alfParam );
-  void        codeAlfCtuFilterIndex      ( CodingStructure& cs, uint32_t ctuRsAddr, bool alfEnableLuma );
+  void        codeAlfCtuEnabled          ( CodingStructure& cs, ChannelType channel, AlfParam* alfParam, const int numCtus );
+  void        codeAlfCtuEnabled          ( CodingStructure& cs, ComponentID compID, AlfParam* alfParam, const int numCtus );
+  void        codeAlfCtuEnabledFlag      ( CodingStructure& cs, uint32_t ctuRsAddr, const int compIdx );
+  void        codeAlfCtuFilterIndex      ( CodingStructure& cs, uint32_t ctuRsAddr );
 
-  void        codeAlfCtuAlternatives     ( CodingStructure& cs, ChannelType channel, AlfParam* alfParam );
-  void        codeAlfCtuAlternatives     ( CodingStructure& cs, ComponentID compID, AlfParam* alfParam );
+  void        codeAlfCtuAlternatives     ( CodingStructure& cs, ChannelType channel, AlfParam* alfParam, const int numCtus );
+  void        codeAlfCtuAlternatives     ( CodingStructure& cs, ComponentID compID, AlfParam* alfParam, const int numCtus );
   void        codeAlfCtuAlternative      ( CodingStructure& cs, uint32_t ctuRsAddr, const int compIdx, const AlfParam* alfParam = NULL );
   void        codeCcAlfFilterControlIdc  ( uint8_t idcVal, CodingStructure &cs, const ComponentID compID, const int curIdx,
                                            const uint8_t *filterControlIdc, Position lumaPos, const int filterCount);
@@ -181,6 +181,7 @@ private:
   const ScanElement* m_scanOrder;
 
   Partitioner        m_partitioner[2];
+  CtxTpl             m_tplBuf[MAX_TB_SIZEY * MAX_TB_SIZEY];
  };
 
 

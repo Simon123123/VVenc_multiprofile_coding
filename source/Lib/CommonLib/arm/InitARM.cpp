@@ -1,12 +1,12 @@
 /* -----------------------------------------------------------------------------
 The copyright in this software is being made available under the Clear BSD
-License, included below. No patent rights, trademark rights and/or 
-other Intellectual Property Rights other than the copyrights concerning 
+License, included below. No patent rights, trademark rights and/or
+other Intellectual Property Rights other than the copyrights concerning
 the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -40,4 +40,76 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------------------------- */
 
-#include "../InterpolationFilterX86.h"
+/*
+ * \ingroup CommonLib
+ * \file    InitARM.cpp
+ * \brief   Initialize encoder SIMD functions.
+ */
+
+#include "CommonDefARM.h"
+#include "CommonLib/CommonDef.h"
+#include "CommonLib/InterpolationFilter.h"
+#include "CommonLib/TrQuant.h"
+#include "CommonLib/RdCost.h"
+#include "CommonLib/Buffer.h"
+#include "CommonLib/TrQuant_EMT.h"
+#include "CommonLib/IntraPrediction.h"
+#include "CommonLib/LoopFilter.h"
+#include "CommonLib/Picture.h"
+
+#include "CommonLib/AdaptiveLoopFilter.h"
+#include "CommonLib/SampleAdaptiveOffset.h"
+
+namespace vvenc
+{
+
+#ifdef TARGET_SIMD_ARM
+
+#if ENABLE_SIMD_OPT_MCIF
+void InterpolationFilter::initInterpolationFilterARM()
+{
+  auto vext = read_arm_extension_flags();
+  switch( vext )
+  {
+  case NEON:
+    _initInterpolationFilterARM<NEON>();
+    break;
+  default:
+    break;
+  }
+}
+#endif
+
+#if ENABLE_SIMD_OPT_BUFFER
+void PelBufferOps::initPelBufOpsARM()
+{
+  auto vext = read_arm_extension_flags();
+  switch( vext )
+  {
+  case NEON:
+    _initPelBufOpsARM<NEON>();
+    break;
+  default:
+    break;
+  }
+}
+#endif
+
+#if ENABLE_SIMD_OPT_DIST
+void RdCost::initRdCostARM()
+{
+  auto vext = read_arm_extension_flags();
+  switch( vext )
+  {
+  case NEON:
+    _initRdCostARM<NEON>();
+    break;
+  default:
+    break;
+  }
+}
+#endif
+
+#endif   // TARGET_SIMD_ARM
+
+}   // namespace

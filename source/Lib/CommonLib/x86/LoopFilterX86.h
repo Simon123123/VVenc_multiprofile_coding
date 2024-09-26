@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -669,7 +669,9 @@ template <X86_VEXT vext>
 void LoopFilter::_initLoopFilterX86()
 {
   xPelFilterLuma  = xPelFilterLumaX86<vext>;
+#if INTPTR_MAX == INT64_MAX || !defined( _WIN32 )
   xFilteringPandQ = xFilteringPandQX86<vext>;
+#endif
 }
 
 template void LoopFilter::_initLoopFilterX86<SIMDX86>();

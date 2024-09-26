@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -53,16 +53,19 @@ namespace vvenc {
   //! \ingroup CommonLib
   //! \{
 
+using namespace x86_simd;
+
   class AffineGradientSearch
   {
   public:
-    void  (*m_HorizontalSobelFilter)  (Pel* const pPred, const int predStride, int *const pDerivate, const int derivateBufStride, const int width, const int height);
-    void  (*m_VerticalSobelFilter)    (Pel* const pPred, const int predStride, int *const pDerivate, const int derivateBufStride, const int width, const int height);
-    void  (*m_EqualCoeffComputer)     (Pel* pResidue, int residueStride, int **ppDerivate, int derivateBufStride, int64_t(*pEqualCoeff)[7], int width, int height, bool b6Param);
+    void  (*m_HorizontalSobelFilter)  (Pel* const pPred, const int predStride, Pel *const pDerivate,   const int derivateBufStride, const int width, const int height);
+    void  (*m_VerticalSobelFilter)    (Pel* const pPred, const int predStride, Pel *const pDerivate,   const int derivateBufStride, const int width, const int height);
+    void  (*m_EqualCoeffComputer[2])  (Pel* const pResi, const int resiStride, Pel **const ppDerivate, const int derivateBufStride, const int width, const int height, int64_t(*pEqualCoeff)[7]);
 
-    static void xHorizontalSobelFilter( Pel* const pPred, const int predStride, int *const pDerivate, const int derivateBufStride, const int width, const int height);
-    static void xVerticalSobelFilter  ( Pel* const pPred, const int predStride, int *const pDerivate, const int derivateBufStride, const int width, const int height);
-    static void xEqualCoeffComputer   ( Pel* pResidue, int residueStride, int **ppDerivate, int derivateBufStride, int64_t(*pEqualCoeff)[7], int width, int height, bool b6Param);
+    static void xHorizontalSobelFilter( Pel* const pPred, const int predStride, Pel *const pDerivate,   const int derivateBufStride, const int width, const int height);
+    static void xVerticalSobelFilter  ( Pel* const pPred, const int predStride, Pel *const pDerivate,   const int derivateBufStride, const int width, const int height);
+    template<bool b6Param>
+    static void xEqualCoeffComputer   ( Pel* const pResi, const int resiStride, Pel **const ppDerivate, const int derivateBufStride, const int width, const int height, int64_t(*pEqualCoeff)[7]);
 
     AffineGradientSearch();
     ~AffineGradientSearch() {}

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -51,7 +51,10 @@ namespace vvenc {
 
 VVEncCfg::VVEncCfg()
   : m_stageParallelProc( false )
+  , m_salienceBasedOpt( true )
+  , m_rateCap ( false )
   , m_bimCtuSize( 64 )
+  , m_MaxQT { 128, 128, 128 }
 {
 }
 
@@ -68,6 +71,8 @@ void VVEncCfg::xInitCfgMembers()
   m_log2GopSize       = floorLog2( m_GOPSize );
   m_maxTLayer         = m_picReordering && m_GOPSize > 1 ? vvenc::ceilLog2( m_GOPSize ) : 0;
   m_bimCtuSize        = m_CTUSize;
+  m_MaxQT[0] = m_MaxQT[1] = m_MaxQT[2] = m_CTUSize;
+  m_rateCap           = m_RCMaxBitrate > 0 && m_RCMaxBitrate < INT32_MAX && m_RCTargetBitrate == 0;
 }
 
 }

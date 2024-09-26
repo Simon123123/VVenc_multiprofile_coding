@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -160,8 +160,8 @@ Picture::Picture()
     , isNeededForOutput ( false )
     , isFinished        ( false )
     , isLongTerm        ( false )
-    , encPic            ( true )
-    , writePic          ( true )
+    , isFlush           ( false )
+    , isInProcessList   ( false )
     , precedingDRAP     ( false )
     , gopEntry          ( nullptr )
     , refCounter        ( 0 )
@@ -174,28 +174,33 @@ Picture::Picture()
     , ctsValid          ( false )
     , isPreAnalysis     ( false )
     , m_picShared       ( nullptr )
+    , gopAdaptedQP      ( 0 )
+    , isSceneCutGOP       ( false )
+    , isSceneCutCheckAdjQP( false )
     , isMeanQPLimited   ( false )
     , picInitialQP      ( -1 )
     , picInitialLambda  ( -1.0 )
     , picMemorySTA      ( -1 )
     , picVisActTL0      ( 0 )
     , picVisActY        ( 0 )
+    , picSpVisAct       ( 0 )
     , isSccWeak         ( false )
     , isSccStrong       ( false )
-    , useScME           ( false )
-    , useScMCTF         ( false )
-    , useScTS           ( false )
-    , useScBDPCM        ( false )
-    , useScIBC          ( false )
-    , useScLMCS         ( false )
-    , useScSAO          ( false )
-    , useScNumRefs      ( false )
-    , useScFastMrg      ( 0 )
+    , useME           ( false )
+    , useMCTF         ( false )
+    , useTS           ( false )
+    , useBDPCM        ( false )
+    , useIBC          ( false )
+    , useLMCS         ( false )
+    , useSAO          ( false )
+    , useNumRefs      ( false )
+    , useFastMrg      ( 0 )
     , useQtbttSpeedUpMode( 0 )
-    , seqBaseQp         ( 0 )
     , actualHeadBits    ( 0 )
     , actualTotalBits   ( 0 )
     , encRCPic          ( nullptr )
+    , picApsGlobal      ( nullptr )
+    , refApsGlobal      ( nullptr )
 {
   std::fill_n( m_sharedBufs, (int)NUM_PIC_TYPES, nullptr );
   std::fill_n( m_bufsOrigPrev, NUM_QPA_PREV_FRAMES, nullptr );
@@ -223,21 +228,29 @@ void Picture::reset()
   isNeededForOutput   = true;
   isFinished          = false;
   isLongTerm          = false;
+  isFlush             = false;
+  isInProcessList     = false;
   isMeanQPLimited     = false;
-  encPic              = false;
-  writePic            = false;
   precedingDRAP       = false;
 
   gopEntry            = nullptr;
   refCounter          = 0;
   poc                 = -1;
   TLayer              = std::numeric_limits<uint32_t>::max();
-
+  gopAdaptedQP        = 0;
+  isSceneCutGOP        = false;
+  isSceneCutCheckAdjQP = false;
   actualHeadBits      = 0;
   actualTotalBits     = 0;
+  encRCPic            = nullptr;
+  picApsGlobal        = nullptr;
+  refApsGlobal        = nullptr;
 
   std::fill_n( m_sharedBufs, (int)NUM_PIC_TYPES, nullptr );
   std::fill_n( m_bufsOrigPrev, NUM_QPA_PREV_FRAMES, nullptr );
+ 
+  if( m_tileColsDone )
+    std::fill( m_tileColsDone->begin(), m_tileColsDone->end(), 0 );
 
   encTime.resetTimer();
 }
@@ -270,6 +283,8 @@ void Picture::destroy( bool bPicHeader )
   {
     delete psei;
   }
+
+  delete m_tileColsDone;
 
   SEIs.clear();
 }
@@ -325,14 +340,16 @@ void Picture::finalInit( const VPS& _vps, const SPS& sps, const PPS& pps, PicHea
   }
   SEIs.clear();
 
-  for (size_t i = 0; i < slices.size(); i++)
+  for( size_t i = 0; i < slices.size(); i++ )
   {
     delete slices[i];
   }
   slices.clear();
+  ctuSlice.clear();
+  ctuSlice.resize( pps.pcv->sizeInCtus, nullptr );
 
   const ChromaFormat chromaFormatIDC = sps.chromaFormatIdc;
-  const int          iWidth = pps.picWidthInLumaSamples;
+  const int          iWidth  = pps.picWidthInLumaSamples;
   const int          iHeight = pps.picHeightInLumaSamples;
 
   if( cs )
@@ -346,26 +363,31 @@ void Picture::finalInit( const VPS& _vps, const SPS& sps, const PPS& pps, PicHea
     cs->pps = &pps;
     cs->sps = &sps;
     cs->vps = &_vps;
-    cs->create( UnitArea( chromaFormatIDC, Area( 0, 0, iWidth, iHeight )), true, pps.pcv );
+    cs->createPicLevel( UnitArea( chromaFormatIDC, Area( 0, 0, iWidth, iHeight )), pps.pcv );
   }
 
   cs->picture   = this;
-  cs->refCS     = cs;
+  cs->lumaCS    = cs;
   cs->slice     = nullptr;  // the slices for this picture have not been set at this point. update cs->slice after swapSliceObject()
   cs->picHeader = picHeader;
-  if ( alfAps )
+  if( alfAps )
   {
-    memcpy(cs->alfAps, alfAps, sizeof(cs->alfAps));
+    memcpy( cs->alfAps, alfAps, sizeof( cs->alfAps ) );
   }
   cs->lmcsAps = lmcsAps;
   cs->pcv     = pps.pcv;
   vps         = &_vps;
   dci         = nullptr;
 
-  if( ! m_picBufs[ PIC_RECONSTRUCTION ].valid() )
+  if( !m_picBufs[PIC_RECONSTRUCTION].valid() )
   {
     m_picBufs[ PIC_RECONSTRUCTION ].create( chromaFormat, Area( lumaPos(), lumaSize() ), sps.CTUSize, margin, MEMORY_ALIGN_DEF_SIZE );
   }
+  if( !m_tileColsDone )
+  {
+    m_tileColsDone = new std::vector<std::atomic<int>> ( pps.pcv->heightInCtus );
+  }
+  std::fill( m_tileColsDone->begin(), m_tileColsDone->end(), 0 );
 
   sliceDataStreams.clear();
   sliceDataNumBins = 0;
@@ -373,15 +395,16 @@ void Picture::finalInit( const VPS& _vps, const SPS& sps, const PPS& pps, PicHea
 
 void Picture::setSccFlags( const VVEncCfg* encCfg )
 {
-  useScME      = encCfg->m_motionEstimationSearchMethodSCC > 0                          && isSccStrong;
-  useScTS      = encCfg->m_TS == 1                || ( encCfg->m_TS == 2                && isSccWeak );
-  useScBDPCM   = encCfg->m_useBDPCM == 1          || ( encCfg->m_useBDPCM == 2          && isSccWeak );
-  useScMCTF    = encCfg->m_vvencMCTF.MCTF == 1    || ( encCfg->m_vvencMCTF.MCTF == 2    && ! isSccStrong );
-  useScLMCS    = encCfg->m_lumaReshapeEnable == 1 || ( encCfg->m_lumaReshapeEnable == 2 && ! isSccStrong );
-  useScIBC     = encCfg->m_IBCMode == 1           || ( encCfg->m_IBCMode == 2           && isSccStrong );
-  useScSAO     = encCfg->m_bUseSAO                && ( !encCfg->m_saoScc                || isSccWeak );
-  useScNumRefs = isSccStrong;
-  useScFastMrg = isSccStrong ? 0 : std::max(0, encCfg->m_useFastMrg - 2);
+  useME      = encCfg->m_motionEstimationSearchMethodSCC > 0                          && isSccStrong;
+  useTS      = encCfg->m_TS == 1                || ( encCfg->m_TS == 2                && isSccWeak );
+  useBDPCM   = encCfg->m_useBDPCM == 1          || ( encCfg->m_useBDPCM == 2          && isSccWeak );
+  useMCTF    = encCfg->m_vvencMCTF.MCTF == 1    || ( encCfg->m_vvencMCTF.MCTF == 2    && ! isSccStrong );
+  useLMCS    = encCfg->m_lumaReshapeEnable == 1 || ( encCfg->m_lumaReshapeEnable == 2 && ! isSccStrong );
+  useIBC     = encCfg->m_IBCMode == 1           || ( encCfg->m_IBCMode == 2           && isSccStrong );
+  useSAO     = encCfg->m_bUseSAO                && ( !encCfg->m_saoScc                || isSccWeak );
+  useSelectiveRdoq = encCfg->m_useSelectiveRDOQ == 2 ? !isSccWeak : !!encCfg->m_useSelectiveRDOQ;
+  useNumRefs = isSccStrong;
+  useFastMrg = isSccStrong ? 0 : std::max(0, encCfg->m_useFastMrg - 2);
   useQtbttSpeedUpMode = encCfg->m_qtbttSpeedUpMode;
 
   if( ( encCfg->m_qtbttSpeedUpMode & 2 ) && isSccStrong )
@@ -402,7 +425,7 @@ Slice* Picture::allocateNewSlice()
 
   memcpy( slice.alfAps, cs->alfAps, sizeof(cs->alfAps) );
 
-  if ( slices.size() >= 2 )
+  if( slices.size() >= 2 )
   {
     slice.copySliceInfo( slices[ slices.size() - 2 ] );
   }

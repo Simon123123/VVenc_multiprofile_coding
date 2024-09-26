@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -53,17 +53,12 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \{
 
 #define ALF_CTU_PAR_TRACING ( 0 && ENABLE_TRACING )
-#define ALF_SINGLE_PREC_FLOAT 1
 
 namespace vvenc {
 
 class NoMallocThreadPool;
 
-#if ALF_SINGLE_PREC_FLOAT
-typedef float alf_float_t; 
-#else
-typedef double alf_float_t;
-#endif
+typedef float alf_float_t;
 
 struct AlfCovariance
 {
@@ -319,6 +314,12 @@ private:
   int  gnsCholeskyDec              ( TE inpMatr, TE outMatr, int numEq ) const;
 };
 
+struct EncAlfRsrc
+{
+  CABACWriter* m_CABACEstimator;
+  CtxCache*    m_CtxCache;
+};
+
 class EncAdaptiveLoopFilter : public AdaptiveLoopFilter
 {
 public:
@@ -362,6 +363,13 @@ private:
   int                    m_clipTmp[MAX_NUM_ALF_LUMA_COEFF];
   std::vector<uint8_t>   m_numCtusInAsu;
 
+  std::vector<int>       m_apsIds;
+  std::vector<int>       m_apsIdsChroma;
+  std::vector<int>       m_apsIdsCcAlf[2];
+  uint8_t                m_mapFilterIdxToFilterIdc[MAX_NUM_CC_ALF_FILTERS + 1];
+  int                    m_newApsIdLuma;
+  double                 m_lambdaChromaWeight;
+
   int m_apsIdCcAlfStart[2];
 
   short                  m_bestFilterCoeffSet[MAX_NUM_CC_ALF_FILTERS][MAX_NUM_CC_ALF_CHROMA_COEFF];
@@ -376,7 +384,6 @@ private:
   uint8_t*               m_filterControl;         // current iterations filter control
   uint8_t*               m_bestFilterControl;     // best saved filter control
   int                    m_reuseApsId[2];
-  bool                   m_limitCcAlf;
   NoMallocThreadPool*    m_threadpool;
   int                    m_maxAsuWidth;
   int                    m_maxAsuHeight;
@@ -386,45 +393,52 @@ private:
   int                    m_numCtusInAsuWidth;
   int                    m_numCtusInAsuHeight;
   bool                   m_accumStatCTUWise;
+  bool                   m_alfFilterStatEnabled[MAX_NUM_COMP];
 
 public:
   EncAdaptiveLoopFilter();
   virtual ~EncAdaptiveLoopFilter() { destroy(); }
   void init                         ( const VVEncCfg& encCfg, const PPS& pps, CABACWriter& cabacEstimator, CtxCache& ctxCache, NoMallocThreadPool* threadpool );
   void destroy                      ();
-  void initDistortion               ();
-  std::vector<int> getAvaiApsIdsLuma( CodingStructure& cs, int& newApsId );
-  void alfEncoderCtb                ( CodingStructure& cs, AlfParam& alfParamNewFilters, const double lambdaChromaWeight );
-  void initCABACEstimator           ( Slice* pcSlice, ParameterSetMap<APS>* apsMap );
+  void initASU                      ( int m_alfUnitSize );
+  void initDistortion               ( const int numAsus );
+  void getAvaiApsIdsLuma            ( Slice& slice );
+  void alfEncoderCtb(CodingStructure& cs, AlfParam& alfParamNewFilters, const double lambdaChromaWeight, const int numAsus, const int numCtus);
+  void initCABACEstimator           ( Slice* pcSlice );
   void setApsIdStart                ( int i ) { m_apsIdStart = i; }
   int  getApsIdStart                () { return m_apsIdStart; }
   void getStatisticsCTU             ( Picture& pic, CodingStructure& cs, PelUnitBuf& recYuv, const int ctuRsAddr, PelStorage& alfTempCtuBuf );
   void getStatisticsASU             ( Picture& pic, CodingStructure& cs, PelUnitBuf& recYuv, int xA, int yA, int xC, int yC, PelStorage& alfTempCtuBuf );
   void copyCTUforALF                ( const CodingStructure& cs, int ctuPosX, int ctuPosY );
   void deriveStatsForCcAlfFilteringCTU( CodingStructure& cs, const int compIdx, const int ctuRsAddr, PelStorage& alfTempCtuBuf );
-  void deriveCcAlfFilter            ( Picture& pic, CodingStructure& cs );
+  void selectCcAlfFilterForCtuLine  ( CodingStructure& cs, ComponentID compID, const PelUnitBuf& dstYuv, CABACWriter* CABACEstimator, CtxCache* ctxCache, int firstCtuIdx, int lastCtuIdx );
+  void deriveCcAlfFilter            ( Picture& pic, CodingStructure& cs, int numCtus );
   void applyCcAlfFilterCTU          ( CodingStructure& cs, ComponentID compID, const int ctuRsAddr, PelStorage& alfTempCtuBuf );
-  void deriveFilter                 ( Picture& pic, CodingStructure& cs, const double* lambdas );
+  void deriveFilter                 ( Picture& pic, CodingStructure& cs, const double* lambdas, const int numCtus );
+  void selectFilterForCTU           ( CodingStructure& cs, CABACWriter* CABACEstimator, CtxCache* ctxCache, int ctuIdx );
   void reconstructCTU_MT            ( Picture& pic, CodingStructure& cs, const int ctuRsAddr, PelStorage& alfTempCtuBuf );
   void reconstructCTU               ( Picture& pic, CodingStructure& cs, const CPelUnitBuf& recBuf, const int ctuRsAddr, PelStorage& alfTempCtuBuf );
 //  void alfReconstructor             ( CodingStructure& cs );
+  void initEncProcess               ( Slice& slice );
+  void initDerivation               ( Slice& slice );
   void resetFrameStats              ( bool ccAlfEnabled );
   bool isSkipAlfForFrame            ( const Picture& pic ) const;
+  int  getAsuHeightInCtus           () { return m_numCtusInAsuHeight; }
 private:
   void   xStoreAlfAsuEnabledFlag    ( CodingStructure& cs, int ctuX, int ctuY, int ctuIdx, const int compIdx, bool flag );
   void   xStoreAlfAsuAlternative    ( CodingStructure& cs, int ctuX, int ctuY, int ctuIdx, const int compIdx, const uint8_t alt );
   void   xStoreAlfAsuFilterIdx      ( CodingStructure& cs, int ctuX, int ctuY, int ctuIdx, const short fltIdx, short* alfCtbFilterSetIndex );
-  double xCodeAlfAsuEnabledFlag     ( CodingStructure& cs, int ctuIdx, const int compIdx, AlfParam* alfParam, const double ctuLambda );
-  double xCodeAlfAsuAlternative     ( CodingStructure& cs, int asuIdx, int ctuIdx, const int compIdx, AlfParam* alfParam, const double ctuLambda );
-  double xCodeAlfAsuLumaFilterIdx   ( CodingStructure& cs, int asuIdx, int ctuIdx, AlfParam* alfParam, const double ctuLambda );
+  double xCodeAlfAsuEnabledFlag     ( CodingStructure& cs, int ctuIdx, const int compIdx, CABACWriter* CABACEstimator, const double ctuLambda );
+  double xCodeAlfAsuAlternative     ( CodingStructure& cs, int asuIdx, int ctuIdx, const int compIdx, AlfParam* alfParam, CABACWriter* CABACEstimator, const double ctuLambda );
+  double xCodeAlfAsuLumaFilterIdx   ( CodingStructure& cs, int asuIdx, int ctuIdx, CABACWriter* CABACEstimator, const double ctuLambda );
   void   xGetStatisticsCTU          ( Picture& pic, CodingStructure& cs, PelUnitBuf& recYuv, const int xPos, const int yPos, const int asuRsAddr, PelStorage& alfTempCtuBuf );
-  void   alfEncoder              ( CodingStructure& cs, AlfParam& alfParam, const ChannelType channel, const double lambdaChromaWeight );
+  void   alfEncoder              ( CodingStructure& cs, AlfParam& alfParam, const ChannelType channel, const double lambdaChromaWeight, const int numAsus, const int numCtus );
 
   void   copyAlfParam            ( AlfParam& alfParamDst, AlfParam& alfParamSrc, ChannelType channel );
   double mergeFiltersAndCost     ( AlfParam& alfParam, AlfFilterShape& alfShape, AlfCovariance* covFrame, AlfCovariance* covMerged, int clipMerged[MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_LUMA_COEFF], int& uiCoeffBits );
 
-  void   getFrameStats           ( ChannelType channel );
-  void   getFrameStat            ( AlfCovariance* frameCov, AlfCovariance** ctbCov, uint8_t* ctbEnableFlags, uint8_t* ctbAltIdx, const int numClasses, int altIdx );
+  void   getFrameStats           ( ChannelType channel, const int numAsus );
+  void   getFrameStat            ( AlfCovariance* frameCov, AlfCovariance** ctbCov, uint8_t* ctbEnableFlags, uint8_t* ctbAltIdx, const int numClasses, int altIdx, const int numAsus );
   void   getPreBlkStats          ( AlfCovariance *alfCovariace, const AlfFilterShape &shape, AlfClassifier *classifier, Pel *org, const int orgStride, Pel *rec, const int recStride,
                                    const CompArea &areaDst, const ChannelType channel, int vbCTUHeight, int vbPos );
   template<bool clipToBdry, bool simd>
@@ -439,12 +453,12 @@ private:
   void   mergeClasses            ( const AlfFilterShape& alfShape, AlfCovariance* cov, AlfCovariance* covMerged, int clipMerged[MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_LUMA_COEFF], const int numClasses, short filterIndices[MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_CLASSES]);
 
 
-  double getFilterCoeffAndCost   ( CodingStructure& cs, double distUnfilter, ChannelType channel, bool bReCollectStat, int& uiCoeffBits, bool onlyFilterCost = false );
+  double getFilterCoeffAndCost   ( CodingStructure& cs, double distUnfilter, ChannelType channel, bool bReCollectStat, int& uiCoeffBits, const int numAsus, const int numCtus, bool onlyFilterCost = false );
   double deriveFilterCoeffs      ( AlfCovariance* cov, AlfCovariance* covMerged, int clipMerged[MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_CLASSES][MAX_NUM_ALF_LUMA_COEFF], AlfFilterShape& alfShape, short* filterIndices, int numFilters, alf_float_t errorTabForce0Coeff[MAX_NUM_ALF_CLASSES][2], AlfParam& alfParam);
   int    deriveFilterCoefficientsPredictionMode( AlfFilterShape& alfShape, int **filterSet, int** filterCoeffDiff, const int numFilters );
   double deriveCoeffQuant        ( int *filterClipp, int *filterCoeffQuant, const AlfCovariance& cov, const AlfFilterShape& shape, const int bitDepth, const bool optimizeClip );
   double deriveCtbAlfEnableFlags ( CodingStructure& cs, ChannelType channel, const double chromaWeight,
-                                   const int numClasses, const int numCoeff, double& distUnfilter );
+                                   const int numClasses, const int numCoeff, const int numAsus, double& distUnfilter );
   void   roundFiltCoeff          ( int *filterCoeffQuant, alf_float_t*filterCoeff, const int numCoeff, const int factor );
   void   roundFiltCoeffCCALF     ( int16_t *filterCoeffQuant, alf_float_t*filterCoeff, const int numCoeff, const int factor );
 
@@ -474,6 +488,7 @@ private:
   int  getMaxNumAlternativesChroma( );
   int  getCoeffRateCcAlf         ( short chromaCoeff[MAX_NUM_CC_ALF_FILTERS][MAX_NUM_CC_ALF_CHROMA_COEFF], bool filterEnabled[MAX_NUM_CC_ALF_FILTERS], uint8_t filterCount, ComponentID compID);
   void deriveCcAlfFilterCoeff    ( ComponentID compID, short filterCoeff[MAX_NUM_CC_ALF_FILTERS][MAX_NUM_CC_ALF_CHROMA_COEFF], const uint8_t filterIdx );
+  void determineControlIdcValuesCtuLine( CodingStructure& cs, const ComponentID compID, int firstCtuIdx, int lastCtuIdx, double** unfilteredDistortion, uint64_t* trainingDistortion[MAX_NUM_CC_ALF_FILTERS], uint8_t* filterControl, bool filterEnabled[MAX_NUM_CC_ALF_FILTERS], uint8_t mapFilterIdxToFilterIdc[MAX_NUM_CC_ALF_FILTERS + 1], uint8_t ccAlfFilterCount, CABACWriter* CABACEstimator, TempCtx& ctxBest, TempCtx& ctxStart );
   void determineControlIdcValues ( CodingStructure &cs, const ComponentID compID, const PelBuf *buf, const int ctuWidthC,
                                    const int ctuHeightC, const int picWidthC, const int picHeightC,
                                    double **unfilteredDistortion, uint64_t *trainingDistortion[MAX_NUM_CC_ALF_FILTERS],
@@ -484,13 +499,16 @@ private:
                                    bool     filterEnabled[MAX_NUM_CC_ALF_FILTERS],
                                    uint8_t  mapFilterIdxToFilterIdc[MAX_NUM_CC_ALF_FILTERS + 1],
                                    uint8_t &ccAlfFilterCount);
-  void deriveCcAlfFilter         ( CodingStructure& cs, ComponentID compID, const PelUnitBuf& orgYuv, const PelUnitBuf& dstYuv );
+  void deriveCcAlfFilter         ( CodingStructure& cs, ComponentID compID, const PelUnitBuf& orgYuv, const PelUnitBuf& dstYuv, int numCtus );
   void xSetupCcAlfAPS            ( CodingStructure& cs );
   std::vector<int> getAvailableCcAlfApsIds(CodingStructure& cs, ComponentID compID);
+  uint64_t countLumaSwingGreaterThanThresholdCTU(const Pel* luma, int x, int y, int lumaStride, int height, int width, int log2BlockWidth, int log2BlockHeight);
+  uint64_t countChromaSampleValueNearMidPointCTU(const Pel* chroma, int x, int y, int chromaStride, int height, int width, int log2BlockWidth, int log2BlockHeight);
   void countLumaSwingGreaterThanThreshold(const Pel* luma, int lumaStride, int height, int width, int log2BlockWidth, int log2BlockHeight, uint64_t* lumaSwingGreaterThanThresholdCount, int lumaCountStride);
   void countChromaSampleValueNearMidPoint(const Pel* chroma, int chromaStride, int height, int width, int log2BlockWidth, int log2BlockHeight, uint64_t* chromaSampleCountNearMidPoint, int chromaSampleCountNearMidPointStride);
   void getFrameStatsCcalf        ( ComponentID compIdx, int filterIdc);
-  void initDistortionCcalf       ();
+  void xGetFrameStatsCcalf       ( ComponentID compIdx, int filterIdc, int numCtus );
+  void initDistortionCcalf       ( int numCtus );
   inline int getAsuMaxCtuX( int ctuX )
   {
     return std::min( ctuX + m_numCtusInAsuWidth, (int)m_numCTUsInWidth );

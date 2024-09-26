@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -60,7 +60,9 @@ namespace CS
 {
   UnitArea  getArea                    (const CodingStructure &cs, const UnitArea& area, const ChannelType chType, const TreeType treeType);
   bool      isDualITree                (const CodingStructure &cs);
+  void      setRefinedMotionFieldCTU   (      CodingStructure &cs, const int ctuX, const int ctuY );
   void      setRefinedMotionField      (      CodingStructure &cs);
+  int       signalModeCons             (const CodingStructure &cs, const UnitArea &currArea, const PartSplit split, const ModeType modeTypeParent);
 }
 
 
@@ -179,8 +181,8 @@ namespace CU
   void     getIBCMergeCandidates        (const CodingUnit& cu, MergeCtx& mrgCtx, const int& mrgCandIdx = -1);
   void     fillIBCMvpCand               (CodingUnit& cu, AMVPInfo& amvpInfo);
   void     getIbcMVPsEncOnly            (CodingUnit& cu, Mv* mvPred, int& nbPred);
-  bool     isAddNeighborMvIBC           (const Mv& currMv, Mv* neighborMvs, int numNeighborMv);
-  bool     getDerivedBVIBC              (CodingUnit& cu, const Mv& currentMv, Mv& derivedMv);
+  bool     isMvInRangeFPP               (const int yB, const int nH, const int yMv, const int ifpLines, const PreCalcValues& pcv, const int yCompScale = 0, const int mvPrecShift = MV_FRACTIONAL_BITS_INTERNAL);
+  bool     isMotionBufInRangeFPP        (const CodingUnit& cu, const int ifpLines);
 }
 
 // TU tools
@@ -203,6 +205,8 @@ uint32_t  getCtuAddrFromCtuSize         (const Position& pos, const unsigned max
 int       getNumModesMip                (const Size& block);
 int       getMipSizeId                  (const Size& block);
 bool      allowLfnstWithMip             (const Size& block);
+
+bool      refPicCtuLineReady            (const Slice& slice, const int refCtuRow, const PreCalcValues& pcv);
 
 template<typename T, size_t N>
 uint32_t updateCandList( T uiMode, double uiCost, static_vector<T, N> &candModeList, static_vector<double, N> &candCostList, size_t uiFastCandNum = N, int *iserttPos = nullptr )

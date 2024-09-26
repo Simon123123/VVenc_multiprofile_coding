@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -54,6 +54,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 namespace vvenc {
 
+using namespace x86_simd;
+
 struct AlfClassifier
 {
   AlfClassifier() {}
@@ -98,9 +100,9 @@ public:
   AdaptiveLoopFilter();
   virtual ~AdaptiveLoopFilter() {}
   void        reconstructCoeffAPSs    ( CodingStructure& cs, bool luma, bool chroma, bool isRdo);
-  void        reconstructCoeff        ( AlfParam& alfParam, ChannelType channel, const bool isRdo, const bool isRedo = false);
-  void        ALFProcess              ( CodingStructure& cs);
-  void        create                  ( const int picWidth, const int picHeight, const ChromaFormat format, const int maxCUWidth, const int maxCUHeight, const int maxCUDepth, const int inputBitDepth[MAX_NUM_CH] );
+  void        reconstructCoeffFixedAPSs(CodingStructure& cs, bool luma, bool chroma, bool isRdo);
+  void        reconstructCoeff(AlfParam& alfParam, ChannelType channel, const bool isRdo, const bool isRedo = false);
+  void        create                  ( const int picWidth, const int picHeight, const ChromaFormat format, const int maxCUWidth, const int maxCUHeight, const int inputBitDepth[MAX_NUM_CH] );
   void        destroy                 ();
   static void deriveClassificationBlk ( AlfClassifier *classifier,
                                        const CPelBuf& srcLuma, const Area& blkDst, const Area& blk, const int shift,
@@ -156,6 +158,10 @@ protected:
   short                        m_coeffFinal[MAX_NUM_ALF_CLASSES * MAX_NUM_ALF_LUMA_COEFF];
   short                        m_clippFinal[MAX_NUM_ALF_CLASSES * MAX_NUM_ALF_LUMA_COEFF];
   short                        m_chromaClippFinal[VVENC_MAX_NUM_ALF_ALTERNATIVES_CHROMA][MAX_NUM_ALF_LUMA_COEFF];
+  short                        m_coeffApsLumaFixed[ALF_CTB_MAX_NUM_APS][MAX_NUM_ALF_LUMA_COEFF * MAX_NUM_ALF_CLASSES];
+  short                        m_clippApsLumaFixed[ALF_CTB_MAX_NUM_APS][MAX_NUM_ALF_LUMA_COEFF * MAX_NUM_ALF_CLASSES];
+  short                        m_chromaCoeffFinalFixed[VVENC_MAX_NUM_ALF_ALTERNATIVES_CHROMA][MAX_NUM_ALF_LUMA_COEFF];
+  short                        m_chromaClippFinalFixed[VVENC_MAX_NUM_ALF_ALTERNATIVES_CHROMA][MAX_NUM_ALF_LUMA_COEFF];
   uint8_t*                     m_ctuEnableFlag[MAX_NUM_COMP];
   uint8_t*                     m_ctuAlternative[MAX_NUM_COMP];
   PelStorage                   m_tempBuf;
@@ -165,7 +171,6 @@ protected:
   int                          m_picHeight;
   int                          m_maxCUWidth;
   int                          m_maxCUHeight;
-  int                          m_maxCUDepth;
   uint32_t                     m_numCTUsInWidth;
   uint32_t                     m_numCTUsInHeight;
   uint32_t                     m_numCTUsInPic;

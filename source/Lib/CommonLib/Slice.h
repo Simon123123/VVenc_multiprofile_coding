@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -961,7 +961,7 @@ public:
 
     return tileRowResIdx + tileRowResIdxRest;
   }
-  bool                   canFilterCtuBdry( int ctuX, int ctuY, int offX, int offY ) const { return getTileIdx( ctuX, ctuY ) == getTileIdx( ctuX + offX, ctuY + offY ) || loopFilterAcrossTilesEnabled; }
+  bool                   canFilterCtuBdry( int ctuX, int ctuY, int offX, int offY ) const { return loopFilterAcrossTilesEnabled || getTileIdx( ctuX, ctuY ) == getTileIdx( ctuX + offX, ctuY + offY ); }
   
   const SubPic&          getSubPicFromPos(const Position& pos)  const;
   const SubPic&          getSubPicFromCU (const CodingUnit& cu) const;
@@ -984,7 +984,7 @@ struct APS
   bool                   hasPrefixNalUnitType;
   bool                   chromaPresent;
   int                    poc;
-  APS() : apsId(0), temporalId( 0 ), layerId( 0 ), apsType(0), hasPrefixNalUnitType(false), chromaPresent( false ), poc(-1)
+  APS() : apsId(MAX_UINT), temporalId( 0 ), layerId( 0 ), apsType(0), hasPrefixNalUnitType(false), chromaPresent( false ), poc(-1)
   { }
 };
 
@@ -1263,9 +1263,10 @@ public:
                               Slice();
   virtual                     ~Slice();
   void                        resetSlicePart();
-  void                        constructRefPicList(const PicList& rcListPic, bool extBorder);
+  void                        constructRefPicList(const PicList& rcListPic, bool extBorder, const bool usingLongTerm = true);
   void                        updateRefPicCounter( int step );
-  bool                        checkRefPicsReconstructed() const;
+  bool                        checkAllRefPicsAccessible() const;
+  bool                        checkAllRefPicsReconstructed() const;
   void                        setRefPOCList();
   void                        setSMVDParam();
   void                        checkColRefIdx(uint32_t curSliceSegmentIdx, const Picture* pic) const;
@@ -1294,7 +1295,7 @@ public:
   void                        copySliceInfo( const Slice* slice, bool cpyAlmostAll = true);
 
   void                        checkLeadingPictureRestrictions( const PicList& rcListPic ) const;
-  void                        applyReferencePictureListBasedMarking( const PicList& rcListPic, const ReferencePictureList* pRPL0, const ReferencePictureList* pRPL1, const int layerId, const PPS& pps )  const;
+  void                        applyReferencePictureListBasedMarking( const PicList& rcListPic, const ReferencePictureList* pRPL0, const ReferencePictureList* pRPL1, const int layerId, const PPS& pps, const bool usingLongTerm = true )  const;
   bool                        isStepwiseTemporalLayerSwitchingPointCandidate( const PicList& rcListPic ) const;
   bool                        isRplPicMissing( const PicList& rcListPic, const RefPicList refList, int& missingPoc ) const;
   void                        createExplicitReferencePictureSetFromReference( const PicList& rcListPic, const ReferencePictureList* pRPL0, const ReferencePictureList* pRPL1 );
@@ -1561,7 +1562,7 @@ protected:
 class PreCalcValues
 {
 public:
-  PreCalcValues( const SPS& sps, const PPS& pps, bool _isEncoder )
+  PreCalcValues( const SPS& sps, const PPS& pps, const unsigned _maxQtSize[3] )
     : chrFormat           ( sps.chromaFormatIdc )
     , maxCUSize           ( sps.CTUSize )
     , maxCUSizeMask       ( maxCUSize  - 1 )
@@ -1576,7 +1577,6 @@ public:
     , lumaWidth           ( pps.picWidthInLumaSamples )
     , lumaHeight          ( pps.picHeightInLumaSamples )
     , fastDeltaQPCuMaxSize( Clip3<unsigned>( (1 << sps.log2MinCodingBlockSize), sps.CTUSize, 32u) )
-    , isEncoder           ( _isEncoder )
     , ISingleTree         ( !sps.dualITree )
     , wrapArround         ( sps.wrapAroundEnabled )
     , maxMTTDepth         { sps.maxMTTDepth[0], sps.maxMTTDepth[1], sps.maxMTTDepth[2] }
@@ -1584,7 +1584,9 @@ public:
     , maxBtSize           { sps.maxBTSize[0], sps.maxBTSize[1], sps.maxBTSize[2] }
     , maxTtSize           { sps.maxTTSize[0], sps.maxTTSize[1], sps.maxTTSize[2] }
     , minQtSize           { sps.minQTSize[0], sps.minQTSize[1], sps.minQTSize[2] }
-  {}
+    , maxQtSize           { _maxQtSize[0], _maxQtSize[1], _maxQtSize[2] }
+  {
+  }
 
   const ChromaFormat chrFormat;
   const unsigned     maxCUSize;
@@ -1601,7 +1603,6 @@ public:
   const unsigned     lumaWidth;
   const unsigned     lumaHeight;
   const unsigned     fastDeltaQPCuMaxSize;
-  const bool         isEncoder;
   const bool         ISingleTree;
   const bool         wrapArround;
 
@@ -1611,6 +1612,7 @@ private:
   const unsigned     maxBtSize  [3];
   const unsigned     maxTtSize  [3];
   const unsigned     minQtSize  [3];
+  const unsigned     maxQtSize  [3];
 
   unsigned getValIdx      ( const Slice &slice, const ChannelType chType ) const;
 
@@ -1620,6 +1622,7 @@ public:
   unsigned getMaxBtSize   ( const Slice &slice, const ChannelType chType ) const;
   unsigned getMaxTtSize   ( const Slice &slice, const ChannelType chType ) const;
   unsigned getMinQtSize   ( const Slice &slice, const ChannelType chType ) const;
+  unsigned getMinDepth    ( const SliceType slicetype, const ChannelType chType )   const { return maxCUSizeLog2 - Log2(slicetype == VVENC_I_SLICE ? (chType == CH_L ? maxQtSize[0] : maxQtSize[2]) : maxQtSize[1]); }
   unsigned getMaxDepth    ( const SliceType slicetype, const ChannelType chType )   const { return maxCUSizeLog2 - Log2(slicetype == VVENC_I_SLICE ? (chType == CH_L ? minQtSize[0] : minQtSize[2]) : minQtSize[1]); }
   Area     getCtuArea     ( const int ctuPosX, const int ctuPosY ) const;
 };

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -64,11 +64,15 @@ public:
   GOPEntry         m_gopEntry;
   bool             m_isSccWeak;
   bool             m_isSccStrong;
+  bool             m_forceSCC;
   uint16_t         m_picVisActTL0;
   uint16_t         m_picVisActY;
+  uint16_t         m_picSpVisAct[MAX_NUM_CH];
   int              m_picMemorySTA;
+  uint16_t         m_picMotEstError;
   uint8_t          m_minNoiseLevels[QPA_MAX_NOISE_LEVELS];
   std::vector<int> m_ctuBimQpOffset;
+  int              m_picAuxQpOffset; // auxiliary QP offset per frame, for combination of RC and BIM (and possibly other tools)
 
 private:
   PelStorage       m_origBuf;
@@ -83,21 +87,25 @@ private:
 
 public:
   PicShared()
-  : m_isSccWeak   ( false )
-  , m_isSccStrong ( false )
-  , m_picVisActTL0( 0 )
-  , m_picVisActY  ( 0 )
-  , m_picMemorySTA( 0 )
-  , m_cts         ( 0 )
-  , m_maxFrames   ( -1 )
-  , m_poc         ( -1 )
-  , m_refCount    ( -1 )
-  , m_isLead      ( false )
-  , m_isTrail     ( false )
-  , m_ctsValid    ( false )
+  : m_isSccWeak     ( false )
+  , m_isSccStrong   ( false )
+  , m_forceSCC      ( false )
+  , m_picVisActTL0  ( 0 )
+  , m_picVisActY    ( 0 )
+  , m_picMemorySTA  ( 0 )
+  , m_picMotEstError( 0 )
+  , m_picAuxQpOffset( 0 )
+  , m_cts           ( 0 )
+  , m_maxFrames     ( -1 )
+  , m_poc           ( -1 )
+  , m_refCount      ( -1 )
+  , m_isLead        ( false )
+  , m_isTrail       ( false )
+  , m_ctsValid      ( false )
   {
     std::fill_n( m_prevShared, NUM_QPA_PREV_FRAMES, nullptr );
     std::fill_n( m_minNoiseLevels, QPA_MAX_NOISE_LEVELS, 255u );
+    m_picSpVisAct[CH_L] = m_picSpVisAct[CH_C] = 0;
     m_gopEntry.setDefaultGOPEntry();
   };
 
@@ -131,6 +139,7 @@ public:
 
     m_isSccWeak    = false;
     m_isSccStrong  = false;
+    m_forceSCC     = false;
     m_picVisActTL0 = 0;
     m_picVisActY   = 0;
     m_picMemorySTA = 0;
@@ -141,8 +150,11 @@ public:
     m_isTrail      = m_maxFrames > 0 && poc >= m_maxFrames;
     m_ctsValid     = yuvInBuf->ctsValid;
     m_ctuBimQpOffset.resize( 0 );
+    m_picMotEstError = 0;
+    m_picAuxQpOffset = 0;
     std::fill_n( m_prevShared, NUM_QPA_PREV_FRAMES, nullptr );
     std::fill_n( m_minNoiseLevels, QPA_MAX_NOISE_LEVELS, 255u );
+    m_picSpVisAct[CH_L] = m_picSpVisAct[CH_C] = 0;
     m_gopEntry.setDefaultGOPEntry();
   }
 
@@ -155,6 +167,7 @@ public:
     pic->isSccStrong    = m_isSccStrong;
     pic->picVisActTL0   = m_picVisActTL0;
     pic->picVisActY     = m_picVisActY;
+    pic->picSpVisAct    = m_picSpVisAct[CH_L];
     pic->picMemorySTA   = m_picMemorySTA;
     pic->poc            = m_poc;
     pic->cts            = m_cts;
@@ -203,31 +216,23 @@ public:
 class EncStage
 {
 private:
-  EncStage* m_nextStage;
-  PicList   m_procList;
-  PicList   m_freeList;
-  int       m_minQueueSize;
-  int       m_startPoc;
-  bool      m_flushAll;
-  bool      m_processLeadTrail;
-  bool      m_sortByPoc;
-  int       m_ctuSize;
-  bool      m_isNonBlocking;
+  EncStage* m_nextStage        { nullptr };
+  PicList   m_procList         { };
+  PicList   m_freeList         { };
+  int       m_minQueueSize     { 0 };
+  int       m_startPoc         { 0 };
+  bool      m_flushAll         { false };
+  bool      m_processLeadTrail { false };
+  bool      m_sortByPoc        { false };
+  int       m_ctuSize          { MAX_CU_SIZE };
+  bool      m_isNonBlocking    { false };
+  bool      m_flush            { false };
 
 protected:
-  int       m_picCount;
+  int       m_picCount         { 0 };
 
 public:
   EncStage()
-  : m_nextStage       ( nullptr )
-  , m_minQueueSize    ( 0 )
-  , m_startPoc        ( 0 )
-  , m_flushAll        ( false )
-  , m_processLeadTrail( false )
-  , m_sortByPoc       ( false )
-  , m_ctuSize         ( MAX_CU_SIZE )
-  , m_isNonBlocking   ( false )
-  , m_picCount        ( 0 )
   {
   };
 
@@ -238,7 +243,7 @@ public:
 
 protected:
   virtual void initPicture    ( Picture* pic ) = 0;
-  virtual void processPictures( const PicList& picList, bool flush, AccessUnitList& auList, PicList& doneList, PicList& freeList ) = 0;
+  virtual void processPictures( const PicList& picList, AccessUnitList& auList, PicList& doneList, PicList& freeList ) = 0;
 
 public:
   virtual void waitForFreeEncoders() {}
@@ -277,9 +282,10 @@ public:
   {
     m_nextStage = nextStage;
     m_flushAll  = m_nextStage != nullptr;
+    CHECK( m_flushAll && m_isNonBlocking, "only last stage is allowed to be a non-blocking stage" );
   }
 
-  void addPicSorted( PicShared* picShared )
+  void addPicSorted( PicShared* picShared, bool flush )
   {
     // send lead trail data to next stage if not requested
     if( picShared->getPOC() < m_startPoc
@@ -287,7 +293,7 @@ public:
     {
       if( m_nextStage )
       {
-        m_nextStage->addPicSorted( picShared );
+        m_nextStage->addPicSorted( picShared, flush );
       }
       return;
     }
@@ -334,12 +340,45 @@ public:
           break;
       }
     }
+
+    // if flush is signalled, insert all new pictures with flush signal set
+    // for non-blocking stage, mark all pictures after first flush picture in coding order as "have seen flush" themselves
+    // assume this to work deterministically, because the coding of these pictures shouldn't have been started yet
+    pic->isFlush = flush;
+    if( m_isNonBlocking && pic->isFlush )
+    {
+      for( PicList::iterator cpyItr = picItr; cpyItr != m_procList.end(); cpyItr++ )
+      {
+        CHECK( ( *cpyItr )->isInitDone, "set flush signal on a picture for which the coding process has already started" );
+        ( *cpyItr )->isFlush = true;
+      }
+    }
+
     m_procList.insert( picItr, pic );
     m_picCount++;
   }
 
   void runStage( bool flush, AccessUnitList& auList )
   {
+    // check for first flush signal
+    if( flush && ! m_flush )
+    {
+      if( ! m_isNonBlocking )
+      {
+        // assume blocking stages are at the front and behave deterministically with respect to the input YUV pictures
+        // therefore mark all pictures in blocking stages as "have seen flush signal"
+        for( auto pic : m_procList )
+          pic->isFlush = true;
+      }
+      else
+      {
+        // for the non-blocking stage, mark at least the last picture in coding order as "have seen flush signal"
+        if( ! m_procList.empty() )
+          m_procList.back()->isFlush = true;
+      }
+      m_flush = true;
+    }
+
     // ready to go?
     if( ( (int)m_procList.size() >= m_minQueueSize )
         || ( m_procList.size() && flush ) )
@@ -350,7 +389,7 @@ public:
         // process pictures
         PicList doneList;
         PicList freeList;
-        processPictures( m_procList, flush, auList, doneList, freeList );
+        processPictures( m_procList, auList, doneList, freeList );
 
         // send processed/finalized pictures to next stage
         for( auto pic : doneList )
@@ -362,7 +401,7 @@ public:
           picShared->releasePrevBuffers( pic );
           if( m_nextStage )
           {
-            m_nextStage->addPicSorted( picShared );
+            m_nextStage->addPicSorted( picShared, flush );
           }
         }
 

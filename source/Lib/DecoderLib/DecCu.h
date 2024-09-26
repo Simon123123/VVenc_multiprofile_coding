@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -45,7 +45,6 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
-#include "CABACReader.h"
 #include "CommonLib/TrQuant.h"
 #include "CommonLib/InterPrediction.h"
 #include "CommonLib/IntraPrediction.h"
@@ -68,7 +67,6 @@ public:
   virtual ~DecCu();
 
   void  init              ( TrQuant* pcTrQuant, IntraPrediction* pcIntra, InterPrediction* pcInter, ChromaFormat chrFormat );
-  void  decompressCtu     ( CodingStructure& cs, const UnitArea& ctuArea );
 
 protected:
   void xIntraRecQT        ( CodingUnit&      cu, const ChannelType chType );

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -55,6 +55,8 @@ POSSIBILITY OF SUCH DAMAGE.
 //! \{
 
 namespace vvenc {
+
+using namespace x86_simd;
 
 // ====================================================================================================================
 // Constants
@@ -105,7 +107,7 @@ public:
   virtual ~Quant();
 
   // initialize class
-  virtual void init( int rdoq = 0, bool useRDOQTS = false, bool useSelectiveRDOQ = false, int thrVal = 8 );
+  virtual void init( int rdoq = 0, bool useRDOQTS = false, int thrVal = 8 );
 
 public:
 
@@ -144,6 +146,7 @@ private:
                                     const TCoeff entropyCodingMinimum, const TCoeff entropyCodingMaximum,
                                     const bool signHiding,
                                     const TCoeff m_thrVal );
+  bool    ( *xNeedRdoq )          ( const TCoeff* pCoeff, size_t numCoeff, int quantCoeff, int64_t offset, int shift );
 
 #ifdef TARGET_SIMD_X86
   void initQuantX86();
@@ -154,7 +157,6 @@ private:
 protected:
   int      m_RDOQ;
   bool     m_useRDOQTS;
-  bool     m_useSelectiveRDOQ;
   double   m_dLambda;
   TCoeffSig m_tmpBdpcm[1 << ( MAX_TB_LOG2_SIZEY << 1 )];
   int      m_thrVal;

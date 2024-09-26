@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -55,14 +55,16 @@ namespace vvenc {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void GOPCfg::initGopList( int refreshType, int intraPeriod, int gopSize, int leadFrames, bool bPicReordering, const vvencGOPEntry cfgGopList[ VVENC_MAX_GOP ], const vvencMCTF& mctfCfg )
+void GOPCfg::initGopList( int refreshType, bool poc0idr, int intraPeriod, int gopSize, int leadFrames, bool bPicReordering, const vvencGOPEntry cfgGopList[ VVENC_MAX_GOP ], const vvencMCTF& mctfCfg, int firstPassMode, int minIntraDist )
 {
   CHECK( gopSize < 1, "gop size has to be greater than 0" );
 
   m_mctfCfg            = &mctfCfg;
   m_refreshType        = refreshType;
   m_picReordering      = bPicReordering;
+  m_poc0idr            = poc0idr;
   m_fixIntraPeriod     = intraPeriod;
+  m_firstPassMode      = firstPassMode;
   m_maxGopSize         = gopSize;
   m_defGopSize         = m_fixIntraPeriod > 0 ? std::min( m_maxGopSize, m_fixIntraPeriod ) : m_maxGopSize;
 
@@ -82,7 +84,7 @@ void GOPCfg::initGopList( int refreshType, int intraPeriod, int gopSize, int lea
     prevGopList = &m_defaultGopLists[ i ];
     pocOffset += m_defGopSize;
   }
-  if( remainSize && remainSize != m_defGopSize )
+  if( remainSize )
   {
     const int prevGopIdx = Clip3<int>( 0, (int)m_defaultGopLists.size() - 1, numGops - 1 );
     prevGopList = &m_defaultGopLists[ prevGopIdx ];
@@ -106,18 +108,19 @@ void GOPCfg::initGopList( int refreshType, int intraPeriod, int gopSize, int lea
   CHECK( leadFrames < 0, "negative number of lead frames not supported" );
 
   // start with first gop list
-  m_gopList     = &m_defaultGopLists[ 0 ];
-  m_nextListIdx = std::min( 1, (int)m_defaultGopLists.size() - 1 );
-  xCreatePocToGopIdx( *m_gopList, m_refreshType == VVENC_DRT_IDR2, m_pocToGopIdx );
+  m_gopList     = remainSize != 0 && !poc0idr ? &m_remainGopList : &m_defaultGopLists[ 0 ];
+  m_nextListIdx = remainSize != 0 && !poc0idr ? 0 : std::min( 1, (int)m_defaultGopLists.size() - 1 );
+  xCreatePocToGopIdx( *m_gopList, !m_poc0idr, m_pocToGopIdx );
 
   // lets start with poc 0
   m_gopNum       = 0;
   m_nextPoc      = -leadFrames;
   m_pocOffset    = 0;
   m_cnOffset     = 0;
-  CHECK( m_refreshType == VVENC_DRT_IDR2 && ( m_fixIntraPeriod == 1 || ! m_picReordering ), "refresh type idr2 only for random access possible" );
-  m_numTillGop   = m_refreshType == VVENC_DRT_IDR2 ? (int)m_gopList->size() - 1 : 0;
-  m_numTillIntra = m_refreshType == VVENC_DRT_IDR2 ? (int)m_gopList->size() - 1 : 0;
+  m_numTillGop   = poc0idr ? 0 : (int)m_gopList->size() - 1;
+  m_numTillIntra = poc0idr ? 0 : (int)m_gopList->size() - 1;
+  m_minIntraDist = minIntraDist;
+  m_lastIntraPOC = -1;
 }
 
 void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
@@ -125,8 +128,8 @@ void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
   // check for lead frames
   if( m_nextPoc < 0 )
   {
-    const int idr2Adj         = m_refreshType == VVENC_DRT_IDR2 ? 1 : 0;
-    const bool isStartOfIntra = m_fixIntraPeriod > 0 ? ( ( m_nextPoc + idr2Adj ) % m_fixIntraPeriod == 0 ) : false; ;
+    const int pocAdj          = m_poc0idr ? 0 : 1;
+    const bool isStartOfIntra = m_fixIntraPeriod > 0 ? ( ( m_nextPoc + pocAdj ) % m_fixIntraPeriod == 0 ) : false; ;
 
     // try to estimate temporal layer 0 leading frames
     bool isTl0 = false;
@@ -142,11 +145,11 @@ void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
       {
         const int ipOffset  = -m_fixIntraPeriod * ( ( m_nextPoc - ( m_fixIntraPeriod - 1 ) ) / m_fixIntraPeriod );
         const int pocInIp   = m_nextPoc + ipOffset;
-        isTl0 = ( pocInIp + idr2Adj ) % m_defGopSize == 0;
+        isTl0 = ( pocInIp + pocAdj ) % m_defGopSize == 0;
       }
       else
       {
-        isTl0 = ( ( m_nextPoc + idr2Adj ) % m_defGopSize ) == 0;
+        isTl0 = ( ( m_nextPoc + pocAdj ) % m_defGopSize ) == 0;
       }
     }
 
@@ -157,6 +160,7 @@ void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
     gopEntry.m_temporalId     = isTl0 ? 0 : 1;
     gopEntry.m_isStartOfIntra = isStartOfIntra;
     gopEntry.m_isValid        = true;
+    if( isStartOfIntra ) m_lastIntraPOC = m_nextPoc;
 
     // continue with next frame
     m_nextPoc += 1;
@@ -165,7 +169,7 @@ void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
 
   const int  pocInGop   = m_nextPoc - m_pocOffset;
   const int  gopId      = m_pocToGopIdx[ pocInGop % (int)m_pocToGopIdx.size() ];
-  const bool isLeading0 = m_refreshType != VVENC_DRT_IDR2 && m_nextPoc == 0 ? true : false; // for non IDR2, we have a leading poc 0
+  const bool isLeading0 = m_poc0idr && m_nextPoc == 0 ? true : false; // for poc0idr, we have a leading poc 0
 
   gopEntry             = (*m_gopList)[ gopId ];
   gopEntry.m_POC       = m_nextPoc;
@@ -178,6 +182,9 @@ void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
   {
     gopEntry.m_sliceType      = 'I';
     gopEntry.m_isStartOfIntra = true;
+    gopEntry.m_temporalId     = 0;
+    gopEntry.m_vtl            = 0;
+    m_lastIntraPOC            = m_nextPoc;
   }
 
   // check for end of current gop
@@ -206,7 +213,7 @@ void GOPCfg::getNextGopEntry( GOPEntry& gopEntry )
         m_gopList = &m_remainGopList;
       }
     }
-    xCreatePocToGopIdx( *m_gopList, m_refreshType == VVENC_DRT_IDR2, m_pocToGopIdx );
+    xCreatePocToGopIdx( *m_gopList, !m_poc0idr, m_pocToGopIdx );
     m_numTillGop  = (int)m_gopList->size();
     m_cnOffset   += isLeading0 ? 1 : prevGopSize;
     if( ! isLeading0 )
@@ -231,6 +238,9 @@ void GOPCfg::startIntraPeriod( GOPEntry& gopEntry )
   gopEntry.m_sliceType      = 'I';
   gopEntry.m_isStartOfIntra = true;
   gopEntry.m_isStartOfGop   = true;
+  gopEntry.m_temporalId     = 0;
+  gopEntry.m_vtl            = 0;
+  m_lastIntraPOC            = gopEntry.m_POC;
 
   // start with first gop list
   m_gopList      = &m_defaultGopLists[ 0 ];
@@ -238,7 +248,7 @@ void GOPCfg::startIntraPeriod( GOPEntry& gopEntry )
   m_numTillIntra = m_fixIntraPeriod;
   m_numTillGop   = (int)m_gopList->size();
 
-  xCreatePocToGopIdx( *m_gopList, m_refreshType == VVENC_DRT_IDR2, m_pocToGopIdx );
+  xCreatePocToGopIdx( *m_gopList, !m_poc0idr, m_pocToGopIdx );
 
   // process current / first I picture
   m_numTillGop  -= 1;
@@ -248,14 +258,16 @@ void GOPCfg::startIntraPeriod( GOPEntry& gopEntry )
   }
 }
 
-void GOPCfg::fixStartOfLastGop( GOPEntry& gopEntry ) const
+void GOPCfg::fixStartOfLastGop( GOPEntry& gopEntry )
 {
   gopEntry.m_isStartOfGop = true;
-  if( gopEntry.m_gopNum == 0 && ! gopEntry.m_isStartOfIntra )
+  if( ! m_poc0idr && gopEntry.m_gopNum == 0 && ! gopEntry.m_isStartOfIntra )
   {
     gopEntry.m_isStartOfIntra = true;
     gopEntry.m_sliceType      = 'I';
     gopEntry.m_temporalId     = 0;
+    gopEntry.m_vtl            = 0;
+    m_lastIntraPOC            = gopEntry.m_POC;
   }
 }
 
@@ -270,6 +282,14 @@ void GOPCfg::getDefaultRPLLists( RPLList& rpl0, RPLList& rpl1 ) const
     rpl0[ i ].initFromGopEntry( *m_defaultRPLList[ i ], 0 );
     rpl1[ i ].initFromGopEntry( *m_defaultRPLList[ i ], 1 );
   }
+}
+
+bool GOPCfg::isSTAallowed( int poc ) const
+{
+  int intraDistBack    = poc - m_lastIntraPOC;
+  int intraDistForward = m_numTillIntra + 1;
+
+  return ( intraDistBack >= m_minIntraDist && intraDistForward >= m_minIntraDist );
 }
 
 bool GOPCfg::hasNonZeroTemporalId() const
@@ -556,13 +576,18 @@ void GOPCfg::xCreateGopList( int maxGopSize, int gopSize, int pocOffset, const v
   std::vector<int> pocToGopIdx;
   xCreatePocToGopIdx( gopList, false, pocToGopIdx );
 
-  // STSA, forward B flags, MCTF index
+  // mark first gop entry
+  gopList[ pocToGopIdx[ 0 ] ].m_isStartOfGop = true;
+
+  // STSA, forward B flags, MCTF index, virtual TLayer
   xSetSTSA     ( gopList, pocToGopIdx );
   xSetBckwdOnly( gopList );
   xSetMctfIndex( maxGopSize, gopList );
-
-  // mark first gop entry
-  gopList[ pocToGopIdx[ 0 ] ].m_isStartOfGop = true;
+  xSetVTL      ( gopList );
+  if( m_firstPassMode == 2 || m_firstPassMode == 4 )
+  {
+    xSetSkipFirstPass( gopList );
+  }
 }
 
 void GOPCfg::xGetPrevGopRefs( const GOPEntryList* prevGopList, std::vector< std::pair<int, int> >& prevGopRefs ) const
@@ -723,6 +748,23 @@ void GOPCfg::xSetMctfIndex( int maxGopSize, GOPEntryList& gopList ) const
   }
 }
 
+void GOPCfg::xSetSkipFirstPass( GOPEntryList& gopList ) const
+{
+  // find max temporal id
+  const int maxTid = xGetMaxTid( gopList );
+
+  // skip first pass encoding after first frame at max temporal id has been encoded
+  if( maxTid > 1 )
+  {
+    bool bSkipRem = false;
+    for( auto& gopEntry : gopList )
+    {
+      gopEntry.m_skipFirstPass = bSkipRem;
+      bSkipRem |= gopEntry.m_temporalId == maxTid;
+    }
+  }
+}
+
 void GOPCfg::xCreatePocToGopIdx( const GOPEntryList& gopList, bool bShift, std::vector<int>& pocToGopIdx ) const
 {
   const int gopSize   = (int)gopList.size();
@@ -811,6 +853,29 @@ void GOPCfg::xSetBckwdOnly( GOPEntryList& gopList ) const
       }
     }
     gopEntry.m_useBckwdOnly = useBckwdOnly;
+  }
+}
+
+void GOPCfg::xSetVTL( GOPEntryList& gopList ) const
+{
+  if( m_picReordering == 0 )
+  {
+    const int vtl = std::min( m_maxGopSize >> 2, 3 );
+    for( auto& gopEntry : gopList )
+    {
+      CHECK( gopEntry.m_temporalId != 0, "unexpected low delay temporal id" );
+      if( !gopEntry.m_isStartOfGop && !gopEntry.m_isStartOfIntra )
+      {
+        gopEntry.m_vtl = vtl;
+      }
+    }
+  }
+  else
+  {
+    for( auto& gopEntry : gopList )
+    {
+      gopEntry.m_vtl = gopEntry.m_temporalId;
+    }
   }
 }
 

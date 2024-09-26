@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -79,8 +79,8 @@ void InterpolationFilter::initInterpolationFilterX86( /*int iBitDepthY, int iBit
     _initInterpolationFilterX86<AVX2>(/*iBitDepthY, iBitDepthC*/);
     break;
   case AVX:
-    _initInterpolationFilterX86<AVX>(/*iBitDepthY, iBitDepthC*/);
-    break;
+    //_initInterpolationFilterX86<AVX>(/*iBitDepthY, iBitDepthC*/);
+    //break;
   case SSE42:
   case SSE41:
     _initInterpolationFilterX86<SSE41>(/*iBitDepthY, iBitDepthC*/);
@@ -94,8 +94,10 @@ void InterpolationFilter::initInterpolationFilterX86( /*int iBitDepthY, int iBit
 #if ENABLE_SIMD_OPT_BUFFER
 void PelBufferOps::initPelBufOpsX86()
 {
-  if ( isInitX86Done )
+  if( isInitX86Done )
     return;
+
+  isInitX86Done = true;
 
   auto vext = read_x86_extension_flags();
   switch (vext){
@@ -104,8 +106,8 @@ void PelBufferOps::initPelBufOpsX86()
       _initPelBufOpsX86<AVX2>();
       break;
     case AVX:
-      _initPelBufOpsX86<AVX>();
-      break;
+      //_initPelBufOpsX86<AVX>();
+      //break;
     case SSE42:
     case SSE41:
       _initPelBufOpsX86<SSE41>();
@@ -113,8 +115,6 @@ void PelBufferOps::initPelBufOpsX86()
     default:
       break;
   }
-
-  isInitX86Done = true;
 }
 #endif
 
@@ -130,8 +130,8 @@ void LoopFilter::initLoopFilterX86()
     _initLoopFilterX86<AVX2>();
     break;
   case AVX:
-    _initLoopFilterX86<AVX>();
-    break;
+    //_initLoopFilterX86<AVX>();
+    //break;
   case SSE42:
   case SSE41:
     _initLoopFilterX86<SSE41>();
@@ -147,14 +147,17 @@ void LoopFilter::initLoopFilterX86()
 void RdCost::initRdCostX86()
 {
   auto vext = read_x86_extension_flags();
-  switch (vext){
+  switch (vext){ 
     case AVX512:
     case AVX2:
+#if defined( _MSC_VER ) && _MSC_VER >= 1938 && _MSC_VER < 1939
+#else
       _initRdCostX86<AVX2>();
       break;
+#endif
     case AVX:
-      _initRdCostX86<AVX>();
-      break;
+      //_initRdCostX86<AVX>();
+      //break;
     case SSE42:
     case SSE41:
       _initRdCostX86<SSE41>();
@@ -176,8 +179,8 @@ void AdaptiveLoopFilter::initAdaptiveLoopFilterX86()
     _initAdaptiveLoopFilterX86<AVX2>();
     break;
   case AVX:
-    _initAdaptiveLoopFilterX86<AVX>();
-    break;
+    //_initAdaptiveLoopFilterX86<AVX>();
+    //break;
   case SSE42:
   case SSE41:
     _initAdaptiveLoopFilterX86<SSE41>();
@@ -198,8 +201,8 @@ void SampleAdaptiveOffset::initSampleAdaptiveOffsetX86()
       _initSampleAdaptiveOffsetX86<AVX2>();
       break;
     case AVX:
-      _initSampleAdaptiveOffsetX86<AVX>();
-      break;
+      //_initSampleAdaptiveOffsetX86<AVX>();
+      //break;
     case SSE42:
     case SSE41:
       _initSampleAdaptiveOffsetX86<SSE41>();
@@ -207,7 +210,6 @@ void SampleAdaptiveOffset::initSampleAdaptiveOffsetX86()
     default:
       break;
   }
-
 }
 
 #endif
@@ -222,8 +224,8 @@ void InterPredInterpolation::initInterPredictionX86()
       _initInterPredictionX86<AVX2>();
       break;
     case AVX:
-      _initInterPredictionX86<AVX>();
-      break;
+      //_initInterPredictionX86<AVX>();
+      //break;
     case SSE42:
     case SSE41:
       _initInterPredictionX86<SSE41>();
@@ -244,8 +246,8 @@ void AffineGradientSearch::initAffineGradientSearchX86()
     _initAffineGradientSearchX86<AVX2>();
     break;
   case AVX:
-    _initAffineGradientSearchX86<AVX>();
-    break;
+    //_initAffineGradientSearchX86<AVX>();
+    //break;
   case SSE42:
   case SSE41:
     _initAffineGradientSearchX86<SSE41>();
@@ -266,8 +268,8 @@ void IntraPrediction::initIntraPredictionX86()
       _initIntraPredictionX86<AVX2>();
       break;
     case AVX:
-      _initIntraPredictionX86<AVX>();
-      break;
+      //_initIntraPredictionX86<AVX>();
+      //break;
     case SSE42:
     case SSE41:
       _initIntraPredictionX86<SSE41>();
@@ -288,11 +290,11 @@ void MCTF::initMCTF_X86()
       _initMCTF_X86<AVX2 >();
       break;
     case AVX:
-      _initMCTF_X86<AVX  >();
-      break;
+      //_initMCTF_X86<AVX  >();
+      //break;
     case SSE42:
-      _initMCTF_X86<SSE42>();
-      break;
+      //_initMCTF_X86<SSE42>();
+      //break;
     case SSE41:
       _initMCTF_X86<SSE41>();
       break;
@@ -312,11 +314,11 @@ void TCoeffOps::initTCoeffOpsX86()
       _initTCoeffOpsX86<AVX2 >();
       break;
     case AVX:
-      _initTCoeffOpsX86<AVX  >();
-      break;
+      //_initTCoeffOpsX86<AVX  >();
+      //break;
     case SSE42:
-      _initTCoeffOpsX86<SSE42>();
-      break;
+      //_initTCoeffOpsX86<SSE42>();
+      //break;
     case SSE41:
       _initTCoeffOpsX86<SSE41>();
       break;
@@ -332,17 +334,17 @@ void TrQuant::initTrQuantX86()
   {
   case AVX512:
   case AVX2:
-  _initTrQuantX86<AVX2 >();
-  break;
+    _initTrQuantX86<AVX2 >();
+    break;
   case AVX:
-  _initTrQuantX86<AVX  >();
-  break;
+    //_initTrQuantX86<AVX  >();
+    //break;
   case SSE42:
-  _initTrQuantX86<SSE42>();
-  break;
+    //_initTrQuantX86<SSE42>();
+    //break;
   case SSE41:
-  _initTrQuantX86<SSE41>();
-  break;
+    _initTrQuantX86<SSE41>();
+    break;
   default:
   break;
   }
@@ -361,8 +363,8 @@ void Quant::initQuantX86()
       _initQuantX86<AVX2>();
       break;
     case AVX:
-      _initQuantX86<AVX>();
-      break;
+      //_initQuantX86<AVX>();
+      //break;
     case SSE42:
     case SSE41:
       _initQuantX86<SSE41>();
@@ -372,6 +374,25 @@ void Quant::initQuantX86()
   }
 }
 
+void DepQuant::initDepQuantX86()
+{
+  auto vext = read_x86_extension_flags();
+  switch (vext){
+  case AVX512:
+  case AVX2:
+    _initDepQuantX86<AVX2>();
+    break;
+  case AVX:
+  case SSE42:
+    _initDepQuantX86<SSE42>();
+    break;
+  case SSE41:
+    _initDepQuantX86<SSE41>();
+    break;
+  default:
+    break;
+  }
+}
 
 #endif
 

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -67,10 +67,11 @@ typedef vvencSliceType    SliceType;
 
 namespace vvenc {
 
-
 #define JVET_M0497_MATRIX_MULT                            1 // 0: Fast method; 1: Matrix multiplication
 
 #define FIX_FOR_TEMPORARY_COMPILER_ISSUES_ENABLED         1 // Some compilers fail on particular code fragments, remove this when the compiler is fixed (or new version is used)
+
+#define IFP_RC_DETERMINISTIC                              0 // Enables Rate Control deterministic behavior (same results) when using IFP
 
 // ====================================================================================================================
 // General settings
@@ -175,7 +176,8 @@ namespace vvenc {
 
 
 #if defined( TARGET_SIMD_X86 ) && !defined( REAL_TARGET_X86 )
-#  define SIMD_EVERYWHERE_EXTENSION_LEVEL                 SSE42
+#  define SIMD_EVERYWHERE_EXTENSION_LEVEL                 SSE41
+#  define SIMD_EVERYWHERE_EXTENSION_LEVEL_ID              X86_SIMD_SSE41
 #endif
 
 // End of SIMD optimizations
@@ -781,7 +783,7 @@ public:
   template<class InputIt>
   iterator        insert( const_iterator _pos, InputIt first, InputIt last )
                                                 { const difference_type numEl = last - first;
-                                                  CHECKD( _size + numEl >= N, "capacity exceeded" );
+                                                  CHECKD( _size + numEl > N, "capacity exceeded" );
                                                   for( difference_type i = _size - 1; i >= _pos - _arr; i-- ) _arr[i + numEl] = _arr[i];
                                                   iterator it = _arr + ( _pos - _arr ); _size += numEl; iterator ret = it;
                                                   while( first != last ) *it++ = *first++;
@@ -789,7 +791,7 @@ public:
 
   iterator        insert( const_iterator _pos, size_t numEl, const T& val )
                                                 { //const difference_type numEl = last - first;
-                                                  CHECKD( _size + numEl >= N, "capacity exceeded" );
+                                                  CHECKD( _size + numEl > N, "capacity exceeded" );
                                                   for( difference_type i = _size - 1; i >= _pos - _arr; i-- ) _arr[i + numEl] = _arr[i];
                                                   iterator it = _arr + ( _pos - _arr ); _size += numEl; iterator ret = it;
                                                   for ( int k = 0; k < numEl; k++) *it++ = val;
@@ -862,20 +864,6 @@ public:
     return ret;
   }
 
-  void defragment()
-  {
-    m_cache.clear();
-  
-    for( T* chunk : m_cacheChunks )
-    {
-      for( ptrdiff_t p = 0; p < DYN_CACHE_CHUNK_SIZE; p++ )
-      {
-        //m_cache.push_back( &chunk[DYN_CACHE_CHUNK_SIZE - p - 1] );
-        m_cache.push_back( &chunk[p] );
-      }
-    }
-  }
-
   void cache( T* el )
   {
     m_cache.push_back( el );
@@ -915,7 +903,9 @@ typedef struct GOPEntry : vvencGOPEntry
   bool      m_isStartOfGop;
   bool      m_isStartOfIntra;
   bool      m_isValid;
+  bool      m_skipFirstPass;
   SceneType m_scType;
+  int       m_vtl;
 
   void setDefaultGOPEntry()
   {
@@ -929,7 +919,9 @@ typedef struct GOPEntry : vvencGOPEntry
     m_isStartOfGop     = false;
     m_isStartOfIntra   = false;
     m_isValid          = false;
+    m_skipFirstPass    = false;
     m_scType           = SCT_NONE;
+    m_vtl              = 0;
   }
 
   void copyFromGopCfg( const vvencGOPEntry& cfgEntry )

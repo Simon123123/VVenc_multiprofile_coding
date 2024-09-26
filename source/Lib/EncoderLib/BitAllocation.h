@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -64,7 +64,8 @@ namespace vvenc {
                                              uint32_t frameRate,
                                              const uint32_t bitDepth,
                                              const bool isUHD,
-                                             unsigned* minVA );
+                                             unsigned* minVisAct,
+                                             unsigned* spVisAct);
 
   // BitAllocation functions
   namespace BitAllocation
@@ -89,7 +90,8 @@ namespace vvenc {
                                  const Distortion uiSadBestForQPA,
                                  std::vector<int>& ctuPumpRedQP,
                                  const uint32_t ctuRsAddr,
-                                 const int baseQP );
+                                 const int baseQP,
+                                 const bool isBIM );
   }
 
 } // namespace vvenc

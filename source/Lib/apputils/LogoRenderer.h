@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -98,6 +98,7 @@ struct LogoOverlay
 inline void to_json( json& j, const LogoInputOptions& l)
 {
   j = json{
+    { "//LogoFilename",  "path to yuv/y4m logo file can be defined as absolute path or relative path from json file" },
     { "LogoFilename",  l.logoFilename },
     { "SourceWidth",   l.sourceWidth },
     { "SourceHeight",  l.sourceHeight },
@@ -166,7 +167,7 @@ public:
     if( m_bInitialized ){ uninit(); }
   }
   
-  int init( const std::string &fileName, vvencChromaFormat chromaFormat, int internalBitdepth, std::ostream& rcOstr )
+  int init( const std::string &fileName, vvencChromaFormat chromaFormat, std::ostream& rcOstr )
   {
     if( m_bInitialized )
     { 
@@ -212,7 +213,13 @@ public:
     {
       rcOstr << "Logo input file error: invalid size " << m_cLogo.inputOpts.sourceWidth  << "x" << m_cLogo.inputOpts.sourceHeight << std::endl;
       return -1; 
-    } 
+    }
+    
+    if( m_cLogo.inputOpts.bitdepth == 8 ) // input must be 10bit -> transpose min/max to 10bit
+    {
+      m_cLogo.inputOpts.bgColorMin = m_cLogo.inputOpts.bgColorMin << 2;
+      m_cLogo.inputOpts.bgColorMax = m_cLogo.inputOpts.bgColorMax << 2;      
+    }
        
     vvenc_YUVBuffer_default( &m_cYuvBufLogo );
     vvenc_YUVBuffer_alloc_buffer( &m_cYuvBufLogo, chromaFormat, m_cLogo.inputOpts.sourceWidth, m_cLogo.inputOpts.sourceHeight );
@@ -257,8 +264,9 @@ public:
 
     // read the logo int yuvBuffer
     bool is16bit       = m_cLogo.inputOpts.bitdepth > 8 ? true : false;
-    int  bitdepthShift = internalBitdepth  - m_cLogo.inputOpts.bitdepth;
-    const LPel maxVal = ( 1 << m_cLogo.inputOpts.bitdepth ) - 1;
+    int  bitdepthShift = 10  - m_cLogo.inputOpts.bitdepth;
+    const LPel maxVal = ( 1 << 10 ) - 1;
+    
     for( int comp = 0; comp < 3; comp++ )
     {
       vvencYUVPlane yuvPlane = m_cYuvBufLogo.planes[ comp ];   
@@ -293,7 +301,7 @@ public:
 
   int uninit()
   {
-    if( m_bInitialized )
+    if( !m_bInitialized )
     { 
       return -1;
     }
@@ -390,6 +398,30 @@ public:
       rcOstr << "logo must define range of BgColorMin/BgColorMax. BgColorMax must be >= BgColorMin (min/max " << 
                  m_cLogo.inputOpts.bgColorMin << "/" << m_cLogo.inputOpts.bgColorMax << ")\n";
       return -1;
+    }
+
+    std::ifstream logofile(m_cLogo.inputOpts.logoFilename);
+    if ( ! logofile.is_open() )
+    {
+      // check if logo path is relative from json file -> make it absolute
+      size_t pos = fileName.find_last_of("/\\");
+      if ( pos != std::string::npos )
+      {
+        std::string folder = fileName.substr(0,pos);
+        std::string absPath = folder + "/" + m_cLogo.inputOpts.logoFilename;
+        std::ifstream abslogofile(absPath);
+        if ( abslogofile.is_open() )
+        {
+          m_cLogo.inputOpts.logoFilename = absPath;
+          logofile.swap( abslogofile );
+        }
+      }
+
+      if ( ! logofile.is_open() )
+      {
+        rcOstr << "Failed to open logo overlay file: " << m_cLogo.inputOpts.logoFilename << std::endl;
+        return -1;
+      }
     }
         
     // limit opacity in range 0-100 %

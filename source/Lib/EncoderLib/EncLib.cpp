@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -56,6 +56,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "EncStage.h"
 #include "PreProcess.h"
 #include "EncGOP.h"
+#include "CommonLib/x86/CommonDefX86.h"
 
 #if VVENC_MULTI_RATE
 #include <string>
@@ -261,7 +262,13 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 
   const_cast<VVEncCfg&>(m_encCfg) = encCfg;
 
+#if defined( REAL_TARGET_X86 ) && defined( _MSC_VER ) && _MSC_VER >= 1938 && _MSC_VER < 1939
+  if( read_x86_extension_flags() >= x86_simd::AVX2 )
+  {
+    msg.log( VVENC_WARNING, "WARNING: MSVC version 17.8 produces invalid AVX2 code, partially disabling AVX2!\n" );
+  }
 
+#endif
   // setup modified configs for rate control
   if( m_encCfg.m_RCNumPasses > 1 || m_encCfg.m_LookAhead )
   {
@@ -282,10 +289,11 @@ void EncLib::initEncoderLib( const vvenc_config& encCfg )
 #endif
 
 #if ENABLE_TIME_PROFILING
-  if( g_timeProfiler == nullptr )
+  if( g_timeProfiler )
   {
-    g_timeProfiler = timeProfilerCreate( encCfg );
+    delete g_timeProfiler;
   }
+  g_timeProfiler = timeProfilerCreate( encCfg );
 #endif
 }
 
@@ -317,12 +325,17 @@ void EncLib::uninitEncoderLib()
 
 #if ENABLE_TIME_PROFILING
 #if ENABLE_TIME_PROFILING_MT_MODE
-  for( auto& p : m_threadPool->getProfilers() )
+  if( m_threadPool )
   {
-    *g_timeProfiler += *p;
+    for(auto& p : m_threadPool->getProfilers())
+    {
+      *g_timeProfiler += *p;
+    }
   }
 #endif
   timeProfilerResults( g_timeProfiler );
+  delete g_timeProfiler;
+  g_timeProfiler = nullptr;
 #endif
   xUninitLib();
 }
@@ -386,13 +399,13 @@ void EncLib::initPass( int pass, const char* statsFName )
   m_maxNumPicShared += 1;
 
   // MCTF
-  if( m_encCfg.m_vvencMCTF.MCTF )
+  if( m_encCfg.m_vvencMCTF.MCTF || m_encCfg.m_usePerceptQPA )
   {
     m_MCTF = new MCTF();
     const int leadFrames   = std::min( VVENC_MCTF_RANGE, m_encCfg.m_leadFrames );
     const int minQueueSize = m_encCfg.m_vvencMCTF.MCTFFutureReference ? ( leadFrames + 1 + VVENC_MCTF_RANGE ) : ( leadFrames + 1 );
     m_MCTF->initStage( m_encCfg, minQueueSize, -leadFrames, true, true, false );
-    m_MCTF->init( m_encCfg, m_threadPool );
+    m_MCTF->init( m_encCfg, m_rateCtrl->rcIsFinalPass, m_threadPool );
     m_encStages.push_back( m_MCTF );
     m_maxNumPicShared += minQueueSize - leadFrames;
   }
@@ -496,11 +509,17 @@ void EncLib::xInitRCCfg()
   vvenc_init_preset( &m_firstPassCfg, vvencPresetMode::VVENC_FIRSTPASS );
 
   // fixed-QP encoding in first rate control pass
-  const double d = (3840.0 * 2160.0) / double (m_encCfg.m_SourceWidth * m_encCfg.m_SourceHeight);
   m_firstPassCfg.m_RCTargetBitrate = 0;
-  m_firstPassCfg.m_QP /*base QP*/  = (m_encCfg.m_RCInitialQP > 0 ? Clip3 (17, MAX_QP, m_encCfg.m_RCInitialQP) : std::max (17, MAX_QP_PERCEPT_QPA - 2 - int (0.5 + sqrt ((d * m_encCfg.m_RCTargetBitrate) / 500000.0))));
+  if( m_firstPassCfg.m_FirstPassMode > 2 )
+  {
+    m_firstPassCfg.m_SourceWidth  = ( m_encCfg.m_SourceWidth  >> 1 ) & ( ~7 );
+    m_firstPassCfg.m_SourceHeight = ( m_encCfg.m_SourceHeight >> 1 ) & ( ~7 );
+    m_firstPassCfg.m_PadSourceWidth  = m_firstPassCfg.m_SourceWidth;
+    m_firstPassCfg.m_PadSourceHeight = m_firstPassCfg.m_SourceHeight;
+  }
 
   // preserve some settings
+  m_firstPassCfg.m_intraQPOffset   = m_encCfg.m_intraQPOffset;
   if( m_firstPassCfg.m_usePerceptQPA && ( m_firstPassCfg.m_QP <= MAX_QP_PERCEPT_QPA || m_firstPassCfg.m_framesToBeEncoded == 1 ) )
   {
     m_firstPassCfg.m_CTUSize       = m_encCfg.m_CTUSize;
@@ -508,9 +527,16 @@ void EncLib::xInitRCCfg()
   m_firstPassCfg.m_vvencMCTF.MCTF  = m_encCfg.m_vvencMCTF.MCTF;
   m_firstPassCfg.m_IBCMode         = m_encCfg.m_IBCMode;
   m_firstPassCfg.m_bimCtuSize      = m_encCfg.m_CTUSize;
+  m_firstPassCfg.m_log2MinCodingBlockSize = m_encCfg.m_log2MinCodingBlockSize;
+
+  // set Inter block size
+  if( m_firstPassCfg.m_FirstPassMode > 0 )
+  {
+    m_firstPassCfg.m_MinQT[ 1 ] = m_firstPassCfg.m_MaxQT[ 1 ] = ( std::min( m_firstPassCfg.m_SourceWidth, m_firstPassCfg.m_SourceHeight ) < 720 ? 32 : 64 );
+  }
 
   // clear MaxCuDQPSubdiv
-  if( m_firstPassCfg.m_CTUSize < 128 && ( m_firstPassCfg.m_PadSourceWidth > 1024 || m_firstPassCfg.m_PadSourceHeight > 640 ) )
+  if( m_firstPassCfg.m_CTUSize < 128 && std::min( m_firstPassCfg.m_SourceWidth, m_firstPassCfg.m_SourceHeight ) >= 720 )
   {
     m_firstPassCfg.m_cuQpDeltaSubdiv = 0;
   }
@@ -519,6 +545,13 @@ void EncLib::xInitRCCfg()
 // ====================================================================================================================
 // Public member functions
 // ====================================================================================================================
+
+// The current I/O work flow consists of three main parts:
+//   1. At the beginning, the encoder can consume input YUV buffers without an output.
+//   2. After the first encoded picture/access unit is output, on each next call: one yuv-buffer IN / one encoded access unit (AU) OUT.
+//      Hence, in stage-parallel mode, we must wait until next encoded picture (AU) is going to be output
+//   3. When no more input is available, the top level goes into flushing mode: nullptr IN / one encoded access unit (AU) OUT. 
+//      The encoder flushes the encoded AUs until the queues are empty.
 
 void EncLib::encodePicture( bool flush, const vvencYUVBuffer* yuvInBuf, AccessUnitList& au, bool& isQueueEmpty )
 {
@@ -530,13 +563,13 @@ void EncLib::encodePicture( bool flush, const vvencYUVBuffer* yuvInBuf, AccessUn
   au.clearAu();
 
   // NOTE regarding the stage parallel processing
-  // The next input yuv-frame must be passed to the encoding process (1.Stage).
-  // Following should be considered:
-  // 1. The final stage is non-blocking, so it dosen't wait until picture is reconstructed.
-  // 2. Generally the stages have different throughput, last stage is the slowest.
-  // 3. The number of picture-units, required for the input frames, is limited.
-  // 4. Due to chunk-mode and non-blockiness, it's possible that we can run out of picture-units.
-  // 5. Then we have to wait for the next available picture-unit and the input frame can be passed to the 1.stage.
+  // The next input yuv-buffer must be passed to the encoding process (1.Stage).
+  // The following should be considered:
+  //   1. The final stage is non-blocking, so it doesn't wait until picture is reconstructed.
+  //   2. Generally, the stages have different throughput; last stage is the slowest.
+  //   3. The number of picture-units required for the input yuv-buffers is limited.
+  //   4. Due to chunk-mode and non-blockiness, it's possible that we can run out of picture-units.
+  //   5. Then we have to wait for the next available picture-unit, so the input frame can be passed to the 1.stage.
 
   PicShared* picShared = nullptr;
   bool inputPending    = ( yuvInBuf != nullptr );
@@ -549,13 +582,13 @@ void EncLib::encodePicture( bool flush, const vvencYUVBuffer* yuvInBuf, AccessUn
       if( picShared )
       {
         picShared->reuse( m_picsRcvd, yuvInBuf );
-        m_encStages[ 0 ]->addPicSorted( picShared );
+        m_encStages[ 0 ]->addPicSorted( picShared, flush );
         m_picsRcvd  += 1;
         inputPending = false;
       }
     }
 
-    PROFILER_EXT_UPDATE( g_timeProfiler, P_TOP_LEVEL, pic->TLayer );
+    PROFILER_EXT_UPDATE( g_timeProfiler, P_TOP_LEVEL, 0 );
 
     // trigger stages
     isQueueEmpty = m_picsRcvd > 0 || ( m_picsRcvd <= 0 && flush );
@@ -568,6 +601,7 @@ void EncLib::encodePicture( bool flush, const vvencYUVBuffer* yuvInBuf, AccessUn
     if( !au.empty() )
     {
       m_AuList.push_back( au );
+
       au.detachNalUnitList();
       au.clearAu();
       // NOTE: delay AU output in stage parallel mode only
@@ -576,7 +610,7 @@ void EncLib::encodePicture( bool flush, const vvencYUVBuffer* yuvInBuf, AccessUn
     }
 
     // wait if input picture hasn't been stored yet or if encoding is running and no new output access unit has been encoded
-    bool waitAndStay = inputPending || ( m_AuList.empty() && ! isQueueEmpty && ( m_accessUnitOutputStarted || flush ) );
+    bool waitAndStay = inputPending || ( m_rateCtrl->rcIsFinalPass && m_AuList.empty() && ! isQueueEmpty && ( m_accessUnitOutputStarted || flush ) );
     if( ! waitAndStay )
     {
       break;
@@ -605,6 +639,9 @@ void EncLib::encodePicture( bool flush, const vvencYUVBuffer* yuvInBuf, AccessUn
   {
     au.clearAu();
   }
+
+  // finally, ensure that the whole queue is empty
+  isQueueEmpty &= m_AuList.empty();
 }
 
 void EncLib::printSummary()
@@ -650,7 +687,7 @@ PicShared* EncLib::xGetFreePicShared()
       return nullptr;
 
     picShared = new PicShared();
-    picShared->create( m_encCfg.m_framesToBeEncoded, m_encCfg.m_internChromaFormat, Size( m_encCfg.m_PadSourceWidth, m_encCfg.m_PadSourceHeight ), m_encCfg.m_vvencMCTF.MCTF );
+    picShared->create( m_encCfg.m_framesToBeEncoded, m_encCfg.m_internChromaFormat, Size( m_encCfg.m_PadSourceWidth, m_encCfg.m_PadSourceHeight ), m_encCfg.m_vvencMCTF.MCTF || m_encCfg.m_usePerceptQPA );
     m_picSharedList.push_back( picShared );
   }
   CHECK( picShared == nullptr, "out of memory" );

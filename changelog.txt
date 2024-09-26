@@ -1,5 +1,200 @@
 /////////////////////////////////////////
-tag 1.7.0-rc1
+tag 1.12.0
+
+* libvvenc:
+  - added parameters:
+    - vvenc_config::m_mtProfile: defines how aggressively to boost multi-threading (0...3, where 0 is
+      current multi-threading, and 3 contains all WPP, IFP and tile usage, use -1 for auto behavior
+      depending on resolution and the number of threads used)
+  - changed parameters (vvenc_config::):
+    - m_numTileCols and m_numTileRows from uint32_t to int32_t (-1 for auto behavior, see m_mtProfile)
+    - m_ifp and m_entropyCodingSynchEnabled from bool to int8_t (-1 for auto behavior, see m_mtProfile)
+  - enabled capped constant quality factor (CQF) mode
+    - constant quality mode (vvenc_config::m_QP set and ::m_usePerceptQPA enabled) with rate capping
+      enabled with an absolute limit (::m_RCMaxBitrate)
+  - minor (~5%) speedups to faster preset
+  - improvements to low-delay encoding configuration
+  - other minor optimizations, cleanups and bugfixes
+
+* vvencFFapp:
+  - added parameters:
+    - MTProfile: set the multi-threading profile (0: current default - 3: use all MT optimizers, use
+      -1/auto to automatically set depending on resolution and number of threads used)
+  - changed parameters:
+    - WaveFrontSynchro, IFP, Tiles: default value set to -1, with the behavior defined by MTProfile
+      parameter, resolution and number of used threads
+
+* vvencapp:
+  - added parameters:
+    - mtprofile: set the multi-threading profile (0: current default - 3: use all MT optimizers, use
+                 -1/auto to automatically set depending on resolution and number of threads used)
+    - internal-bitdepth: sets internal encoding bitdepth, i.e. the output bitstream bitdepth
+    - refreshtype: specifies the refresh-type used at random access points
+    - decodedpicturehash: enable/disable decoded picture hash (DPH) SEI generation
+  - changed parameters:
+    - ifp, tiles: default value set to -1, with the behavior defined by mtprofile parameter, resolution
+                  and number of used threads
+    - format: now accepts yuv400 and yuv400_10 as parameter for monochrome input
+
+/////////////////////////////////////////
+tag 1.11.1
+
+* libvvenc:
+  - fix performance regression for ARM
+    - using SSE41 code to generate NEON with SIMDe rather than AVX2
+  
+/////////////////////////////////////////
+tag 1.11.0
+
+* libvvenc:
+  - added library parameters:
+    - vvenc_config::m_forceScc to force a specific SCC detection decision for all frames
+      (0: do not use, 1/2/3: no SCC/weak SCC/strong SCC)
+    - vvenc_config::m_ifp to enable inter-frame parallelism
+    - vvenc_config::m_minIntraDist to define minimal distance between intra frames (in presentation order)
+  - changed parameters:
+    - vvenc_config::m_RCMaxBitrate can now be specified as factor of target bitrate, use the macro
+      VVENC_SET_MAXRATE_FACTOR to set the value (absolute of negative values will be interpreted as
+      a 4-bit fixed-point factor)
+    - vvenc_config::m_numThreads will now per default be set to 12 for 5K and higher resolutions
+  - renamed library parameters:
+    - vvenc_config::m_fppLinesSynchro to vvenc_config::m_ifpLines
+  - added an affine speedup based on Pejman et al., ICIP 2023.
+  - added vectorized DQ implementation
+  - finalized inter-frame parallelization (previously FPP) improving performance during
+    execution with high number of threads (harmonized with rate control)
+  - improved SCC detection by reducing false positives
+  - overall speedups:
+    - 6% for fast/slow/slower
+    - 12% for medium, 25%+ for multi-threaded execution with long intra periods
+
+* vvencFFapp:
+  - added parameters:
+    - IFP: enables the usage of inter-frame parallelism
+    - IFPLines: defines the synchronization offset in CTU lines
+    - ForceSCC: forces a specific SCC detection decision
+    - MinIntraDistance: defines a minimal distance between intra pictures in presentation order
+  - changed parameters:
+    - FppLinesSynchro: now deprecated, please use IFP and IFPLines
+    - NumThreads: if set to default (-1), will now cause the encoder to use 12 threads for 5K and higher resolutions
+    - MaxRate: if specified with suffix "x", e.g. "2x", the value will be interpreted as multiple of target bitrate
+
+* vvencapp:
+  - added parameters:
+    - ifp: when set, will enable inter-frame parallelism with a default synchronization offset of two CTU lines
+  - changed parameters:
+    - threads, t: if set to default (-1), will now cause the encoder to use 12 threads for 5K and higher resolutions
+    - maxrate, m: if specified with suffix "x", e.g. "2x", the value will be interpreted as multiple of target bitrate
+
+/////////////////////////////////////////
+tag 1.10.0
+
+* libvvenc:
+  - added library parameters:
+    - vvenc_config::m_poc0idr to force POC0 to be an IDR (otherwise per default it will now be a RASL picture)
+  - changed default GOP structure of the first GOP to align with other GOPs, ensuring all intra-periods
+    and DASH segments have equal length
+  - enable spatial subsampling for 1st pass in 2-pass RC per default for faster preset
+  - adaptively extend the number of neighboring frames in MCTF pre-filtering
+  - allow ALF derivation from partial data for FPPLinesSynchro
+  - improved rate matching accuracy at high target rates on easy-to-encode content, especially for HDR
+  - disable compilation for SSE42 and AVX as no specific code is used,
+    only keep explicit support for SSE41 and AVX2
+  - around 0.5% BDR gain for all presets
+  - minor changes and cleanups to rate control, DMVR, MCTF, QPA and others
+
+* vvencFFapp:
+  - added parameter: POC0IDR to control if POC0 is an IDR (=1, default if PicReordering is 1)
+                     or RASL (=0, default if PicReordering is 0)
+
+/////////////////////////////////////////
+tag 1.9.1
+
+* libvvenc:
+  - added library parameters:
+    - vvenc_config::m_maxPicWidth, vvenc_config::m_maxPicHeight to signal maximal possible picture size when
+      encoding for resolution change (e.g. using CRA_CRE decoder refresh)
+  - added medium_lowDecEnergy as a built-in preset (in C-API: VVENC_MEDIUM_LOWDECNRG)
+  - refactoring and improvements of affine search and interpolation filtering
+  - fixed 8-bit encoding from 10-bit input and proper handling of 8-bit video in BIM
+  - added proper setting of conformance window
+  - refactoring and improvements to rate control (RC)
+    - fixed potential integer overflow
+    - finalized spatial subsampling implementation for 2-pass RC
+
+* vvencFFapp:
+  - added parameter: MaxPicSize/MaxPicWidth/MaxPicHeight to control the signaled maximal picture size during
+                     resolution change
+
+/////////////////////////////////////////
+tag 1.9.0
+
+* libvvenc:
+  - removed library parameters: vvenc_config::m_wcgChromaQpControl, vvenc_config::m_ccalfQpThreshold,
+                                vvenc_config::m_switchPOC, vvenc_config::m_switchDQP,
+                                vvenc_config::m_fastForwardToPOC, vvenc_config::m_stopAfterFFtoPOC,
+                                vvenc_config::m_bs2ModPOCAndType, vvenc_config::m_forceDecodeBitstream1,
+                                vvenc_config::m_decodeBitstreams
+  - removed deprecated struct: vvencWCGChromaQPControl
+  - added library parameters:
+    - vvenc_config::m_fppLinesSynchro (controls CTU line offset for dependent frame parallelism)
+    - vvenc_config::m_RCMaxBitrate (controls the maximum instantaneous rate for rate control encoding)
+  - changed library parameters:
+    - vvenc_config::m_FirstPassMode (added spatial and temporal subsampling to first pass)
+  - vvenc_config::m_decodedPictureHashSEIType (when >= 10, the hash is calculated and logged,
+                                               but no SEI message is generated)
+  - vvenc_config::m_IntraPeriodSec (will now round the intra period to a multiple of 8 frames,
+                                    instead of GOP size)
+  - added rate capping during rate control (must be at least 1.5x of target rate)
+  - extensive improvements and cleanups to rate control, especially single pass
+  - improved efficiency by 1-2%
+  - speedup of first pass, especially for preset faster (around 15% overall runtime)
+  - unified MCTF activation for low- and high-rate encoding
+  - various speedups, fixes, and cleanups
+  
+* vvencapp:
+  - added parameter: stats (when enabled, prints a statistical summary of encoding every second of input)
+                     maxrate (enables to specify maximum rate for RC, must be at least 1.5x of target rate)
+
+* vvencFFapp:
+  - added parameter: MaxBitrate (enables to specify maximum rate for RC, must be at least 1.5x of target rate)
+                     stats (when enabled, prints a statistical summary of encoding every second of input)
+  - removed parameters: WCGPPSEnable, WCGPPSCbQpScale, WCGPPSCrQpScale, WCGPPSChromaQpScale,
+                        WCGPPSChromaQpOffset, DebugBitstream, DecodeBitstream1, DecodeBitstream2,
+                        DebugPOC, SwitchPOC, SwitchDQP, FastForwardToPOC, StopAfterFFtoPOC,
+                        DecodeBitstream2ModPOCAndType, ForceDecodeBitstream1, CCALFQpTh, decode
+
+/////////////////////////////////////////
+tag 1.8.0
+
+* libvvenc:
+  - removed library parameters:
+    - vvenc_config::m_temporalSubsampleRatio, vvenc_config::m_MaxCodingDepth, vvenc_config::m_RCForceIntraQP,
+      vvenc_config::m_log2DiffMaxMinCodingBlockSize
+  - added library parameters:
+    - vvenc_config::m_FirstPassMode
+  - changed library parameters:
+    - vvenc_config::m_useSelectiveRDOQ is now an int_8, with 2 enabling selective RDOQ only for SCC
+  - deprecated config: vvencWCGChromaQPControl
+  - QPA: added saliency detection
+  - BIM: propagation of the parameters to higher temporal layers
+  - retuned the presets:
+    - 15% speedup for faster, 10% speedup for fast, medium and slow, 5% for slower
+  - speedup of the first pass for faster preset
+  - various speedups and bugfixes
+
+* vvencapp:
+  
+* vvencFFapp:
+  - removed from default installation! Use VVENC_INSTALL_FULLFEATURE_APP CMake variable to override.
+  - removed parameters: TemporalSubsampleRatio, RCForceIntraQP, MaxMTTHierarchyDepth, MaxMTTHierarchyDepthI,
+                        MaxMTTHierarchyDepthISliceL, MaxMTTHierarchyDepthISliceC
+  - deprecated parameters: WCGPPSEnable, WCGPPSCbQpScale, WCGPPSCrQpScale,
+                           WCGPPSChromaQpScale, WCGPPSChromaQpOffset
+  - added parameters: FirstPassMode
+
+/////////////////////////////////////////
+tag 1.7.0
 
 * libvvenc:
   - removed (unused) library parameters:
@@ -10,6 +205,8 @@ tag 1.7.0-rc1
     - extended vvencHDRMode to also include SDR color spaces
     - vvenc_config: m_numRefPics, m_numRefPicsSCC, m_blockImportanceMapping, m_saoScc
     - vvenc_config: changed m_sliceTypeAdapt from bool to char
+  - changed library parameters:
+    - m_TicksPerSecond new default 27000000 (old: 90000) to support all NTSC frame rates
   - added support for ARM through SIMDe
   - allowing adaptive intra period (content adaptive placement of random access points)
   - ported block importance mapping from VTM

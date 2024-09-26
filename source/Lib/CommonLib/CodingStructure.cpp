@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -73,8 +73,7 @@ CodingStructure::CodingStructure( XUCache& unitCache, std::mutex* mutex )
   : area            ()
   , picture         ( nullptr )
   , parent          ( nullptr )
-  , refCS           ( nullptr )
-  , bestCS          ( nullptr )
+  , lumaCS          ( nullptr )
   , picHeader       ( nullptr )
   , m_isTuEnc       ( false )
   , m_cuCache       ( unitCache.cuCache )
@@ -115,7 +114,7 @@ void CodingStructure::destroy()
 {
   picture   = nullptr;
   parent    = nullptr;
-  refCS     = nullptr;
+  lumaCS     = nullptr;
 
   m_pred.destroy();
   m_resi.destroy();
@@ -142,24 +141,6 @@ void CodingStructure::releaseIntermediateData()
 {
   clearTUs();
   clearCUs();
-}
-
-const int CodingStructure::signalModeCons( const PartSplit split, Partitioner &partitioner, const ModeType modeTypeParent ) const
-{
-  if (CS::isDualITree(*this) || modeTypeParent != MODE_TYPE_ALL || partitioner.currArea().chromaFormat == CHROMA_444 || partitioner.currArea().chromaFormat == CHROMA_400 )
-    return LDT_MODE_TYPE_INHERIT;
-  int minLumaArea = partitioner.currArea().lumaSize().area();
-  if (split == CU_QUAD_SPLIT || split == CU_TRIH_SPLIT || split == CU_TRIV_SPLIT) // the area is split into 3 or 4 parts
-  {
-    minLumaArea = minLumaArea >> 2;
-  }
-  else if (split == CU_VERT_SPLIT || split == CU_HORZ_SPLIT) // the area is split into 2 parts
-  {
-    minLumaArea = minLumaArea >> 1;
-  }
-  int minChromaBlock = minLumaArea >> (getChannelTypeScaleX(CH_C, partitioner.currArea().chromaFormat) + getChannelTypeScaleY(CH_C, partitioner.currArea().chromaFormat));
-  bool is2xNChroma = (partitioner.currArea().chromaSize().width == 4 && split == CU_VERT_SPLIT) || (partitioner.currArea().chromaSize().width == 8 && split == CU_TRIV_SPLIT);
-  return minChromaBlock >= 16 && !is2xNChroma ? LDT_MODE_TYPE_INHERIT : ((minLumaArea < 32) || slice->isIntra()) ? LDT_MODE_TYPE_INFER : LDT_MODE_TYPE_SIGNAL;
 }
 
 CodingUnit* CodingStructure::getLumaCU( const Position& pos )
@@ -300,9 +281,8 @@ CodingUnit& CodingStructure::addCU( const UnitArea& unit, const ChannelType chTy
   cus.push_back( cu );
 
   Mv* prevCuMvd = cuInit ? cuInit->mvdL0SubPu : nullptr;
-
-  uint32_t idx = ++m_numCUs;
-  cu->idx  = idx;
+  
+  cu->idx        = ++m_numCUs;
   cu->mvdL0SubPu = nullptr;
 
   if( isLuma( chType ) && unit.lheight() >= 8 && unit.lwidth() >= 8 && unit.Y().area() >= 128 )
@@ -406,7 +386,12 @@ TransformUnit& CodingStructure::addTU( const UnitArea& unit, const ChannelType c
     unsigned areaSize = tu->blocks[i].area();
     m_offsets[i] += areaSize;
 
-    if( tuInit )
+    const bool cpyRsi = tuInit &&
+                      ( tuInit->cbf[i] ||
+                 ( i && tuInit->jointCbCr && numCh > 1 && ( TU::getCbf( *tuInit, COMP_Cb ) || TU::getCbf( *tuInit, COMP_Cr ) ) )
+                      );
+
+    if( cpyRsi )
       memcpy( coeffs[i], tu->m_coeffs[i], areaSize * sizeof( TCoeffSig ) );
   }
 
@@ -538,11 +523,9 @@ void CodingStructure::allocateVectorsAtPicLevel()
 
 
 
-void CodingStructure::create(const ChromaFormat _chromaFormat, const Area& _area, const bool isTopLayer)
+void CodingStructure::createForSearch( const ChromaFormat _chromaFormat, const Area& _area )
 {
-  createInternals( UnitArea( _chromaFormat, _area ), isTopLayer );
-
-  if( isTopLayer ) return;
+  createInternals( UnitArea( _chromaFormat, _area ), false );
 
   m_reco.create( area );
   m_pred.create( area );
@@ -550,18 +533,11 @@ void CodingStructure::create(const ChromaFormat _chromaFormat, const Area& _area
   m_rspreco.create( CHROMA_400, area.Y() );
 }
 
-void CodingStructure::create(const UnitArea& _unit, const bool isTopLayer, const PreCalcValues* _pcv)
+void CodingStructure::createPicLevel( const UnitArea& _unit, const PreCalcValues* _pcv )
 {
   pcv = _pcv;
 
-  createInternals( _unit, isTopLayer );
-
-  if( isTopLayer ) return;
-
-  m_reco.create( area );
-  m_pred.create( area );
-  m_resi.create( area );
-  m_rspreco.create( CHROMA_400, area.Y() );
+  createInternals( _unit, true );
 }
 
 void CodingStructure::createInternals( const UnitArea& _unit, const bool isTopLayer )
@@ -573,7 +549,7 @@ void CodingStructure::createInternals( const UnitArea& _unit, const bool isTopLa
 
   picture = nullptr;
   parent  = nullptr;
-  refCS   = nullptr;
+  lumaCS  = nullptr;
 
   unsigned _lumaAreaScaled = g_miScaling.scale( area.lumaSize() ).area();
   m_motionBuf = new MotionInfo[_lumaAreaScaled];
@@ -586,7 +562,7 @@ void CodingStructure::createInternals( const UnitArea& _unit, const bool isTopLa
   {
     createCoeffs();
     createTempBuffers( false );
-    initStructData( MAX_INT, false, nullptr, true );
+    initStructData( MAX_INT, false, nullptr );
   }
 }
 
@@ -603,6 +579,8 @@ void CodingStructure::createTempBuffers( const bool isTopLayer )
 
     m_cuPtr[i]      = _area > 0 ? new CodingUnit*    [_area] : nullptr;
   }
+
+  clearCUs( true );
 
   for( unsigned i = 0; i < NUM_EDGE_DIR; i++ )
   {
@@ -629,28 +607,30 @@ void CodingStructure::destroyTempBuffers()
 
   // swap the contents of the vector so that memory released
   std::vector<Mv>().swap( m_dmvrMvCache );
+  std::vector<CodingUnit*>().swap( cus );
+  std::vector<TransformUnit*>().swap( tus );
 }
 
-void CodingStructure::addMiToLut(static_vector<HPMVInfo, MAX_NUM_HMVP_CANDS> &lut, const HPMVInfo &mi)
+void CodingStructure::addMiToLut( static_vector<HPMVInfo, MAX_NUM_HMVP_CANDS>& lut, const HPMVInfo& mi )
 {
   size_t currCnt = lut.size();
 
   bool pruned      = false;
   int  sameCandIdx = 0;
 
-  for (int idx = 0; idx < currCnt; idx++)
+  for( int idx = 0; idx < currCnt; idx++ )
   {
-    if (lut[idx] == mi)
+    if( lut[idx] == mi )
     {
       sameCandIdx = idx;
-      pruned      = true;
+      pruned = true;
       break;
     }
   }
 
-  if (pruned || currCnt == lut.capacity())
+  if( pruned || currCnt == lut.capacity() )
   {
-    lut.erase(lut.begin() + sameCandIdx);
+    lut.erase( lut.begin() + sameCandIdx );
   }
 
   lut.push_back(mi);
@@ -721,7 +701,7 @@ void CodingStructure::initSubStructure( CodingStructure& subStruct, const Channe
 
   subStruct.parent    = this;
   subStruct.picture   = picture;
-  subStruct.refCS     = picture->cs;
+  subStruct.lumaCS    = picture->cs;
 
   subStruct.sps       = sps;
   subStruct.vps       = vps;
@@ -789,7 +769,7 @@ void CodingStructure::useSubStructure( CodingStructure& subStruct, const Channel
     picture->getRecoBuf( clippedArea ).copyFrom( subRecoBuf );
   }
 
-  if (!subStruct.m_isTuEnc && ((!slice->isIntra() || slice->sps->IBC) && chType != CH_C))
+  if( !subStruct.m_isTuEnc && ( ( !slice->isIntra() || slice->sps->IBC ) && chType != CH_C ) )
   {
     // copy motion buffer
     MotionBuf ownMB  = getMotionBuf          ( clippedArea );
@@ -977,10 +957,10 @@ void CodingStructure::compactResize( const UnitArea& _area )
   area = _area;
 }
 
-void CodingStructure::initStructData( const int QP, const bool skipMotBuf, const UnitArea* _area, bool force )
+void CodingStructure::initStructData( const int QP, const bool skipMotBuf, const UnitArea* _area )
 {
-  clearTUs( force );
-  clearCUs( force );
+  clearTUs( false );
+  clearCUs( false );
 
   if( _area ) compactResize( *_area );
 
@@ -989,9 +969,9 @@ void CodingStructure::initStructData( const int QP, const bool skipMotBuf, const
     currQP[0] = currQP[1] = QP;
   }
 
-  if (!skipMotBuf && (!parent || ((!slice->isIntra() || slice->sps->IBC) && !m_isTuEnc)))
+  if( !skipMotBuf && ( !parent || ( ( !slice->isIntra() || slice->sps->IBC ) && !m_isTuEnc ) ) )
   {
-    getMotionBuf().memset( 0 );
+    getMotionBuf().memset( -1 );
   }
 
   m_dmvrMvCacheOffset = 0;
@@ -1011,11 +991,7 @@ void CodingStructure::clearTUs( bool force )
   if( !m_numTUs && !force ) return;
 
 #endif
-  int numCh = getNumberValidComponents( area.chromaFormat );
-  for( int i = 0; i < numCh; i++ )
-  {
-    m_offsets[i] = 0;
-  }
+  memset( m_offsets, 0, sizeof( m_offsets ) );
 
   for( auto &pcu : cus )
   {
@@ -1205,14 +1181,21 @@ const CodingUnit* CodingStructure::getCURestricted( const Position& pos, const C
   const int ydiff  = ( pos.y >> yshift ) - ( curCu.blocks[_chType].y >> yshift );
   const int xdiff  = ( pos.x >> xshift ) - ( curCu.blocks[_chType].x >> xshift );
 
+  if( !xdiff && !ydiff )
+  {
+    const CodingUnit* cu = getCU( pos, _chType, curCu.treeType );
+
+    return ( cu && ( cu->cs != curCu.cs || cu->idx <= curCu.idx ) ) ? cu : nullptr;
+  }
+
   if( ydiff > 0 || ( ydiff == 0 && xdiff > 0 ) || ( ydiff == -1 && xdiff > ( sps->entropyCodingSyncEnabled ? 0 : 1 ) ) )
     return nullptr;
 
-  if( pos.x < 0 || pos.y < 0 || ( pos.x * (1 << csx) ) >= pcv->lumaWidth || pps->getTileIdx( pos.x >> xshift, pos.y >> yshift ) != curCu.tileIdx ) return nullptr;
+  if( pos.x < 0 || pos.y < 0 || ( pos.x * ( 1 << csx ) ) >= pcv->lumaWidth || pps->getTileIdx( pos.x >> xshift, pos.y >> yshift ) != curCu.tileIdx ) return nullptr;
 
   const CodingUnit* cu = getCU( pos, _chType, curCu.treeType );
 
-  return ( cu && CU::isSameSliceAndTile( *cu, curCu ) && ( cu->cs != curCu.cs || cu->idx <= curCu.idx ) ) ? cu : nullptr;
+  return ( cu && CU::isSameSlice( *cu, curCu ) ) ? cu : nullptr;
 }
 
 const CodingUnit *CodingStructure::getCURestricted( const Position &pos, const Position curPos, const unsigned curSliceIdx, const unsigned curTileIdx, const ChannelType _chType, const TreeType _treeType ) const
@@ -1223,6 +1206,11 @@ const CodingUnit *CodingStructure::getCURestricted( const Position &pos, const P
   const int yshift = pcv->maxCUSizeLog2 - csy;
   const int ydiff  = ( pos.y >> yshift ) - ( curPos.y >> yshift );
   const int xdiff  = ( pos.x >> xshift ) - ( curPos.x >> xshift );
+
+  if( !xdiff && !ydiff )
+  {
+    return getCU( pos, _chType, _treeType );
+  }
 
   if( ydiff > 0 || ( ydiff == 0 && xdiff > 0 ) || ( ydiff == -1 && xdiff > ( sps->entropyCodingSyncEnabled ? 0 : 1 ) ) )
     return nullptr;

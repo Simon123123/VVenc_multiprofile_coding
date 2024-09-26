@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -63,7 +63,7 @@ extern "C" {
 
 VVENC_NAMESPACE_BEGIN
 
-/* vvdecLoggingCallback:
+/* vvencLoggingCallback:
    callback function to receive messages of the encoder library
   \param[in]  void* caller contex
   \param[in]  int log level
@@ -82,7 +82,7 @@ typedef void (*vvencLoggingCallback)(void*, int, const char*, va_list);
 #define VVENC_MAX_TLAYER                      7      // Explicit temporal layer QP offset - max number of temporal layer
 #define VVENC_MAX_NUM_CQP_MAPPING_TABLES      3      // Maximum number of chroma QP mapping tables (Cb, Cr and joint Cb-Cr)
 #define VVENC_MAX_NUM_ALF_ALTERNATIVES_CHROMA 8
-#define VVENC_MCTF_RANGE                      4      // max number of frames used for MCTF filtering in forward / backward direction
+#define VVENC_MCTF_RANGE                      6      // max number of frames used for MCTF filtering in forward / backward direction
 #define VVENC_MAX_NUM_COMP                    3      // max number of components
 #define VVENC_MAX_QP_VALS_CHROMA              8      // max number qp vals in array
 #define VVENC_MAX_MCTF_FRAMES                 16
@@ -90,6 +90,7 @@ typedef void (*vvencLoggingCallback)(void*, int, const char*, va_list);
 #define VVENC_DEFAULT_QP                      32     // default base QP
 #define VVENC_AUTO_QP                        -1      // indicates to use default QP, or ignore if RC is used
 #define VVENC_RC_OFF                          0      // indicates rate control is disabled
+#define VVENC_TICKS_PER_SEC_DEF               27000000 // default ticks per second
 
 
 
@@ -118,6 +119,7 @@ typedef enum
  VVENC_MEDIUM    = 2,
  VVENC_SLOW      = 3,
  VVENC_SLOWER    = 4,
+ VVENC_MEDIUM_LOWDECNRG = 130,       // medium based low decoding energy
  VVENC_FIRSTPASS = 254,
  VVENC_TOOLTEST  = 255,
 }vvencPresetMode;
@@ -199,7 +201,7 @@ typedef enum
   VVENC_DRT_CRA                = 1,
   VVENC_DRT_IDR                = 2,
   VVENC_DRT_RECOVERY_POINT_SEI = 3,
-  VVENC_DRT_IDR2               = 4,
+  VVENC_DRT_IDR2               = 4,             //deprecated
   VVENC_DRT_CRA_CRE            = 5,             //constrained RASL encoding
 }vvencDecodingRefreshType;
 
@@ -305,11 +307,13 @@ typedef enum
 
 typedef enum
 {
-  VVENC_HASHTYPE_MD5        = 0,
-  VVENC_HASHTYPE_CRC        = 1,
-  VVENC_HASHTYPE_CHECKSUM   = 2,
-  VVENC_HASHTYPE_NONE       = 3,
-  VVENC_NUMBER_OF_HASHTYPES = 4
+  VVENC_HASHTYPE_MD5          = 0,
+  VVENC_HASHTYPE_CRC          = 1,
+  VVENC_HASHTYPE_CHECKSUM     = 2,
+  VVENC_HASHTYPE_MD5_LOG      = 10, //log only, do not write SEI message into the bitstream
+  VVENC_HASHTYPE_CRC_LOG      = 11, //log only, do not write SEI message into the bitstream
+  VVENC_HASHTYPE_CHECKSUM_LOG = 12, //log only, do not write SEI message into the bitstream
+  VVENC_HASHTYPE_NONE
 }vvencHashType;
 
 // ====================================================================================================================
@@ -358,18 +362,19 @@ typedef struct vvencRPLEntry
 
 VVENC_DECL void vvenc_RPLEntry_default(vvencRPLEntry *RPLEntry );
 
-
-typedef struct vvencWCGChromaQPControl
+// begin: unused, will be removed in future versions
+typedef struct vvencUnusedStruct0
 {
-  bool   enabled        ;    // Enabled flag (0:default)
-  double chromaCbQpScale;    // Chroma Cb QP Scale (1.0:default)
-  double chromaCrQpScale;    // Chroma Cr QP Scale (1.0:default)
-  double chromaQpScale  ;    // Chroma QP Scale (0.0:default)
-  double chromaQpOffset ;    // Chroma QP Offset (0.0:default)
-}vvencWCGChromaQPControl;
+  bool   m_cfgUnused0; // TODO: remove unused memory from configuration
+  double m_cfgUnused1; // TODO: remove unused memory from configuration
+  double m_cfgUnused2; // TODO: remove unused memory from configuration
+  double m_cfgUnused3; // TODO: remove unused memory from configuration
+  double m_cfgUnused4; // TODO: remove unused memory from configuration
+}vvencUnusedStruct0;
 
+typedef vvencUnusedStruct0 vvencWCGChromaQPControl;
 VVENC_DECL void vvenc_WCGChromaQPControl_default(vvencWCGChromaQPControl *WCGChromaQPControl );
-
+// end: unused
 
 typedef struct vvencChromaQpMappingTableParams
 {
@@ -407,7 +412,7 @@ typedef struct vvencMCTF
   int                 MCTFSpeed;
   bool                MCTFFutureReference;
   int                 MCTFUnitSize;
-  int                 mctfUnused2;                                                       // TODO: remove unused memory from configuration
+  int                 mctfUnused;                                                        // TODO: remove unused memory from configuration
 
   int                 numFrames;
   int                 MCTFFrames[VVENC_MAX_MCTF_FRAMES];
@@ -427,14 +432,14 @@ typedef struct vvenc_config
   int                 m_SourceHeight;                                                    // source height in pixel (when interlaced = field height)
   int                 m_FrameRate;                                                       // source frame-rates (Hz) Numerator
   int                 m_FrameScale;                                                      // source frame-rates (Hz) Denominator
-  int                 m_TicksPerSecond;                                                  // ticks per second e.g. 90000 for dts generation (1..27000000, -1: ticks per frame=1)
+  int                 m_TicksPerSecond;                                                  // ticks per second for dts generation (default: 27000000, 1..27000000, -1: ticks per frame=1)
   int                 m_framesToBeEncoded;                                               // number of encoded frames (default: 0, all)
   int                 m_inputBitDepth[ 2 ];                                              // bit-depth of input pictures (2d array for luma,chroma)
 
-  int                 m_numThreads;                                                      // number of worker threads ( if <0: <720p 4threads, else 8threads (limited to available cores))
+  int                 m_numThreads;                                                      // number of worker threads ( if <0: <720p 4threads, <5K 2880p 8threads, else 12threads (limited to available cores))
 
   int                 m_QP;                                                              // QP value of key-picture (0-63, default: 32)
-  int                 m_RCTargetBitrate;                                                 // target bitrate in bps, (default. 0 (rc disabled))
+  int                 m_RCTargetBitrate;                                                 // target bitrate in bps (default: 0 (RC disabled))
 
   vvencMsgLevel       m_verbosity;                                                       // encoder verbosity level
 
@@ -463,8 +468,8 @@ typedef struct vvenc_config
 
   bool                m_usePerceptQPA;                                                   // usage of perceptually motivated input-adaptive QP modification, abbrev. perceptual QP adaptation (QPA).
 
-  uint32_t            m_numTileCols;                                                     // number of tile columns
-  uint32_t            m_numTileRows;                                                     // number of tile rows
+  int32_t             m_numTileCols;                                                     // number of tile columns
+  int32_t             m_numTileRows;                                                     // number of tile rows
 
   // expert config params
   int                 m_conformanceWindowMode;
@@ -473,7 +478,7 @@ typedef struct vvenc_config
   int                 m_confWinTop;
   int                 m_confWinBottom;
 
-  unsigned            m_temporalSubsampleRatio;                                          // temporal subsample ratio, 2 means code every two frames
+  unsigned            m_cfgUnused15;
 
   int                 m_PadSourceWidth;                                                  // source width in pixel
   int                 m_PadSourceHeight;                                                 // source height in pixel (when interlaced = field height)
@@ -503,8 +508,8 @@ typedef struct vvenc_config
   int                 m_cfgUnused4[ 7 ];                                                 // TODO: remove unused memory from configuration
   int                 m_cfgUnused5[ 7 ];
   int                 m_cfgUnused6;
-  int                 m_cfgUnused7;
-  int                 m_cfgUnused8;
+  int                 m_maxPicWidth;
+  int                 m_maxPicHeight;
 
   bool                m_useSameChromaQPTables;
   vvencChromaQpMappingTableParams m_chromaQpMappingTableParams;
@@ -533,7 +538,7 @@ typedef struct vvenc_config
   int                 m_usePerceptQPATempFiltISlice;                                     // Flag indicating if temporal high-pass filtering in visual activity calculation in QPA should (true) or shouldn't (false) be applied for I-slices
 
   bool                m_lumaLevelToDeltaQPEnabled;
-  vvencWCGChromaQPControl  m_wcgChromaQpControl;
+  vvencUnusedStruct0  m_cfgUnused24;
 
   vvencChromaFormat   m_internChromaFormat;
   bool                m_useIdentityTableForNon420Chroma;
@@ -546,7 +551,7 @@ typedef struct vvenc_config
   bool                m_pictureTimingSEIEnabled;
   bool                m_decodingUnitInfoSEIEnabled;
 
-  bool                m_entropyCodingSyncEnabled;
+  int8_t              m_entropyCodingSyncEnabled;
   bool                m_entryPointsPresent;
 
   unsigned            m_CTUSize;
@@ -557,8 +562,8 @@ typedef struct vvenc_config
   unsigned            m_maxBT[3];
   unsigned            m_maxTT[3];
   bool                m_dualITree;
-  unsigned            m_MaxCodingDepth;                                                  // max. total CU depth - includes depth of transform-block structure
-  unsigned            m_log2DiffMaxMinCodingBlockSize;                                   // difference between largest and smallest CU depth
+  unsigned            m_cfgUnused9;                                                      // TODO: remove unused memory from configuration
+  unsigned            m_cfgUnused10;
   int                 m_log2MaxTbSize;
   int                 m_log2MinCodingBlockSize;
 
@@ -566,7 +571,7 @@ typedef struct vvenc_config
   bool                m_bUseHADME;                                                       // flag for using HAD in sub-pel ME
   int                 m_RDOQ;                                                            // flag for using RD optimized quantization
   bool                m_useRDOQTS;                                                       // flag for using RD optimized quantization for transform skip
-  bool                m_useSelectiveRDOQ;                                                // flag for using selective RDOQ
+  int8_t              m_useSelectiveRDOQ;                                                // flag for using selective RDOQ
 
   bool                m_JointCbCrMode;
   int                 m_cabacInitPresent;
@@ -581,7 +586,7 @@ typedef struct vvenc_config
   bool                m_useFastDecisionForMerge;                                         // flag for using Fast Decision Merge RD-Cost
 
   bool                m_bDisableIntraCUsInInterSlices;                                   // Flag for disabling intra predicted CUs in inter slices.
-  bool                m_cfgUnused9;                                                      // TODO: remove unused memory from configuration
+  bool                m_cfgUnused11;                                                     // TODO: remove unused memory from configuration
   bool                m_bFastUDIUseMPMEnabled;
   bool                m_bFastMEForGenBLowDelayEnabled;
 
@@ -601,11 +606,11 @@ typedef struct vvenc_config
   int                 m_IntraEstDecBit;                                                  // Intra estimation decimation factor.
 
   int                 m_RCInitialQP;
-  bool                m_RCForceIntraQP;
+  bool                m_cfgUnused16;                                                     // TODO: remove unused memory from configuration
 
   int                 m_motionEstimationSearchMethod;
   int                 m_motionEstimationSearchMethodSCC;
-  bool                m_cfgUnused10;                                                     // TODO: remove unused memory from configuration
+  bool                m_cfgUnused12;                                                     // TODO: remove unused memory from configuration
   int                 m_SearchRange;                                                     // ME search range
   int                 m_bipredSearchRange;                                               // ME search range for bipred refinement
   int                 m_minSearchWindow;                                                 // ME minimum search window size for the Adaptive Window ME
@@ -664,7 +669,7 @@ typedef struct vvenc_config
   bool                m_loopFilterOffsetInPPS;                                           // offset for deblocking filter in 0 = slice header, 1 = PPS
   int                 m_loopFilterBetaOffsetDiv2[3];                                     // beta offset for deblocking filter
   int                 m_loopFilterTcOffsetDiv2[3];                                       // tc offset for deblocking filter
-  int                 m_cfgUnused11;                                                     // TODO: remove unused memory from configuration
+  int                 m_cfgUnused13;                                                     // TODO: remove unused memory from configuration
 
   bool                m_bDisableLFCrossTileBoundaryFlag;                                 // 0: filter across tile boundaries 1: do not filter across tile boundaries
   bool                m_bDisableLFCrossSliceBoundaryFlag;                                // 0: filter across slice boundaries 1: do not filter across slice boundaries
@@ -692,7 +697,7 @@ typedef struct vvenc_config
   int                 m_chromaSampleLocType;                                             // Specifies the location of chroma samples for progressive content
   bool                m_overscanInfoPresent;                                             // Signals whether overscan_appropriate_flag is present
   bool                m_overscanAppropriateFlag;                                         // Indicates whether conformant decoded pictures are suitable for display using overscan
-  bool                m_cfgUnused12;                                                     // TODO: remove unused memory from configuration
+  bool                m_cfgUnused14;                                                     // TODO: remove unused memory from configuration
   bool                m_videoFullRangeFlag;                                              // Indicates the black level and range of luma and chroma signals
 
   unsigned int        m_masteringDisplay[10];                                            // mastering display colour volume, vector of size 10, format: G(x,y)B(x,y)R(x,y)WP(x,y)L(max,min), 0 <= GBR,WP <= 50000, 0 <= L <= uint (SEI)
@@ -706,7 +711,7 @@ typedef struct vvenc_config
   bool                m_useNonLinearAlfChroma;
   unsigned            m_maxNumAlfAlternativesChroma;
   bool                m_ccalf;
-  int                 m_ccalfQpThreshold;
+  int                 m_cfgUnused25;
   int                 m_alfTempPred;                                                     // Indicates using of temporal filter data prediction through APS
   int                 m_alfSpeed;
 
@@ -731,14 +736,14 @@ typedef struct vvenc_config
   uint32_t            m_numExpTileRows;                                                  // number of explicitly specified tile rows
   uint32_t            m_numSlicesInPic;                                                  // derived number of rectangular slices in the picture (raster-scan slice specified at slice level)
 
-  // decode bitstream options
-  int                 m_switchPOC;                                                       // dbg poc.
-  int                 m_switchDQP;                                                       // switch DQP.
-  int                 m_fastForwardToPOC;                                                // get to encoding the specified POC as soon as possible by skipping temporal layers irrelevant for the specified POC
-  bool                m_stopAfterFFtoPOC;
-  bool                m_bs2ModPOCAndType;
-  bool                m_forceDecodeBitstream1;
-  char                m_decodeBitstreams[2][VVENC_MAX_STRING_LEN];                       // filename for decode bitstreams.
+  // obsolete options
+  int                 m_cfgUnused17;                                                     // TODO: remove unused memory from configuration
+  int                 m_cfgUnused18;                                                     // TODO: remove unused memory from configuration
+  int                 m_cfgUnused19;                                                     // TODO: remove unused memory from configuration
+  bool                m_cfgUnused20;                                                     // TODO: remove unused memory from configuration
+  bool                m_cfgUnused21;                                                     // TODO: remove unused memory from configuration
+  bool                m_cfgUnused22;                                                     // TODO: remove unused memory from configuration
+  char                m_cfgUnused23[2][VVENC_MAX_STRING_LEN];                            // TODO: remove unused memory from configuration
 
   // trace rules
   bool                m_listTracingChannels;
@@ -751,8 +756,7 @@ typedef struct vvenc_config
   int                 m_numIntraModesFullRD;                                             // Number Modes for Full RD Intra Search
   bool                m_reduceIntraChromaModesFullRD;                                    // Reduce Number Modes for Full RD Intra Chroma Search
 
-  // reserved parameters for internal use
-  int                 m_reservedInt[1];
+  int                 m_FirstPassMode;
   int                 m_numRefPics;                                                      // Number of reference pictures
   int                 m_numRefPicsSCC;                                                   // Number of reference pictures
   int                 m_alfUnitSize;                                                     // Size of the Alf Search Unit
@@ -764,7 +768,9 @@ typedef struct vvenc_config
   int                 m_explicitAPSid;
 
   bool                m_picReordering;
-  bool                m_reservedFlag[3];
+  bool                m_reservedFlag;
+  bool                m_poc0idr;
+  int8_t              m_ifpLines;
   bool                m_blockImportanceMapping;
   bool                m_saoScc;
   bool                m_addGOP32refPics;
@@ -772,7 +778,22 @@ typedef struct vvenc_config
   int8_t              m_sliceTypeAdapt;                                                  // enable slice type adaptation (STA)
   bool                m_treatAsSubPic;
 
-  double              m_reservedDouble[10];
+#define VVENC_SET_MAXRATE_FACTOR(f) (-((int)(f*16+0.5)))
+  int                 m_RCMaxBitrate;                                                    // maximum bitrate in bps (default: 0 (RC disabled or least constrained VBR),
+                                                                                         // if negative, the absolute value is interpreted as a 4-bit fixed point multiplier of the target bitrate).
+                                                                                         // -24, i.e. -1.1000 binary, means the maxrate would be set to be the 1.5x of the target bitrate.
+                                                                                         // for convenience use VVENC_SET_MAXRATE_FACTOR, e.g. VVENC_SET_MAXRATE_FACTOR(1.5), to set the multiplier
+  int8_t              m_forceScc;
+  int8_t              m_ifp;
+
+  int8_t              m_mtProfile;                                                       // Use a set of multi-threading boosters (0...3), set to -1 for automatic selection based on number of threads (default),
+                                                                                         // or 0 to force only the usage basic picture and CTU parallelism. If set to 3, tiles (resolution dependent),
+                                                                                         // IFP and WPP are all used. For 1 and 2, an optimal selection of tools is done based on resolution and CTU size.
+  int8_t              m_reservedInt8[1];
+
+  int                 m_minIntraDist;
+  int                 m_reservedInt;
+  double              m_reservedDouble[8];
 
   // internal state variables
   bool                m_configDone;                                                      // state variable, Private context used for internal data ( do not change )
@@ -851,7 +872,7 @@ VVENC_DECL bool vvenc_init_config_parameter( vvenc_config *cfg );
 #define VVENC_OPT_TICKSPERSEC          "tickspersec"          // m_TicksPerSecond
 #define VVENC_OPT_INPUTBITDEPTH        "inputbitdepth"        // m_inputBitDepth
 #define VVENC_OPT_FRAMES               "framestobeencoded"    // m_framesToBeEncoded
-#define VVENC_OPT_PRESET               "preset"               // set preset like "faster,fast,medium,slow,slower
+#define VVENC_OPT_PRESET               "preset"               // set preset like "faster,fast,medium,slow,slower,medium_lowDecEnergy
 #define VVENC_OPT_THREADS              "threads"              // m_numThreads
 #define VVENC_OPT_BITRATE              "bitrate"              // m_RCTargetBitrate
 #define VVENC_OPT_QP                   "qp"                   // m_QP

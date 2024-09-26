@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -647,51 +647,6 @@ void SampleAdaptiveOffset::offsetCTU( const UnitArea& area, const CPelUnitBuf& s
   } //compIdx
 }
 
-void SampleAdaptiveOffset::SAOProcess( CodingStructure& cs, SAOBlkParam* saoBlkParams )
-{
-  CHECK(!saoBlkParams, "No parameters present");
-
-  xReconstructBlkSAOParams(cs, saoBlkParams);
-
-  const uint32_t numberOfComponents = getNumberValidComponents(cs.area.chromaFormat);
-  bool bAllDisabled = true;
-  for (uint32_t compIdx = 0; compIdx < numberOfComponents; compIdx++)
-  {
-    if (m_picSAOEnabled[compIdx])
-    {
-      bAllDisabled = false;
-    }
-  }
-  if (bAllDisabled)
-  {
-    return;
-  }
-
-  const PreCalcValues& pcv = *cs.pcv;
-  Picture& pic             = *cs.picture;
-  PelUnitBuf recBuf        = pic.getRecoBuf();
-  PelUnitBuf saoBuf        = pic.getSaoBuf();
-  saoBuf.copyFrom( recBuf );
-
-  int ctuRsAddr = 0;
-  for( uint32_t yPos = 0; yPos < pcv.lumaHeight; yPos += pcv.maxCUSize )
-  {
-    const uint32_t height = (yPos + pcv.maxCUSize > pcv.lumaHeight) ? (pcv.lumaHeight - yPos) : pcv.maxCUSize;
-    for( uint32_t xPos = 0; xPos < pcv.lumaWidth; xPos += pcv.maxCUSize )
-    {
-      const uint32_t width  = (xPos + pcv.maxCUSize  > pcv.lumaWidth)  ? (pcv.lumaWidth - xPos)  : pcv.maxCUSize;
-      const UnitArea area( cs.area.chromaFormat, Area(xPos , yPos, width, height) );
-
-      offsetCTU( area, saoBuf, recBuf, cs.picture->getSAO()[ctuRsAddr], cs);
-      ctuRsAddr++;
-    }
-  }
-
-  DTRACE_PIC_COMP(D_REC_CB_LUMA_SAO, cs, cs.getRecoBuf(), COMP_Y);
-  DTRACE_PIC_COMP(D_REC_CB_CHROMA_SAO, cs, cs.getRecoBuf(), COMP_Cb);
-  DTRACE_PIC_COMP(D_REC_CB_CHROMA_SAO, cs, cs.getRecoBuf(), COMP_Cr);
-}
-
 void SampleAdaptiveOffset::deriveLoopFilterBoundaryAvailibility(CodingStructure& cs, const Position& pos, uint8_t& availMask ) const
 {
   const int cuSize = cs.pcv->maxCUSize;
@@ -708,16 +663,16 @@ void SampleAdaptiveOffset::deriveLoopFilterBoundaryAvailibility(CodingStructure&
     const int ctuX = pos.x >> cs.pcv->maxCUSizeLog2;
     const int ctuY = pos.y >> cs.pcv->maxCUSizeLog2;
     const PPS* pps = cs.slice->pps;
-    const int wCtu = pps->pcv->widthInCtus;
-    const int hCtu = pps->pcv->heightInCtus;
+    const int Xmax = pps->pcv->widthInCtus  - 1;
+    const int Ymax = pps->pcv->heightInCtus - 1;
     cuLeft       = ctuX > 0                   && pps->canFilterCtuBdry( ctuX, ctuY, -1, 0 ) ? cs.getCU( pos.offset( -cuSize, 0       ), CH_L, TREE_D ): nullptr;
-    cuRight      = ctuX < wCtu                && pps->canFilterCtuBdry( ctuX, ctuY,  1, 0 ) ? cs.getCU( pos.offset( cuSize , 0       ), CH_L, TREE_D ): nullptr;
+    cuRight      = ctuX < Xmax                && pps->canFilterCtuBdry( ctuX, ctuY,  1, 0 ) ? cs.getCU( pos.offset( cuSize , 0       ), CH_L, TREE_D ): nullptr;
     cuAbove      =                ctuY > 0    && pps->canFilterCtuBdry( ctuX, ctuY,  0,-1 ) ? cs.getCU( pos.offset( 0      , -cuSize ), CH_L, TREE_D ): nullptr;
-    cuBelow      =                ctuY < hCtu && pps->canFilterCtuBdry( ctuX, ctuY,  0, 1 ) ? cs.getCU( pos.offset( 0      , cuSize  ), CH_L, TREE_D ): nullptr;
+    cuBelow      =                ctuY < Ymax && pps->canFilterCtuBdry( ctuX, ctuY,  0, 1 ) ? cs.getCU( pos.offset( 0      , cuSize  ), CH_L, TREE_D ): nullptr;
     cuAboveLeft  = ctuX > 0    && ctuY > 0    && pps->canFilterCtuBdry( ctuX, ctuY, -1,-1 ) ? cs.getCU( pos.offset( -cuSize, -cuSize ), CH_L, TREE_D ): nullptr;
-    cuAboveRight = ctuX < wCtu && ctuY > 0    && pps->canFilterCtuBdry( ctuX, ctuY,  1,-1 ) ? cs.getCU( pos.offset( cuSize , -cuSize ), CH_L, TREE_D ): nullptr;
-    cuBelowLeft  = ctuX > 0    && ctuY < hCtu && pps->canFilterCtuBdry( ctuX, ctuY, -1, 1 ) ? cs.getCU( pos.offset( -cuSize, cuSize  ), CH_L, TREE_D ): nullptr;
-    cuBelowRight = ctuX < wCtu && ctuY < hCtu && pps->canFilterCtuBdry( ctuX, ctuY,  1, 1 ) ? cs.getCU( pos.offset( cuSize , cuSize  ), CH_L, TREE_D ): nullptr;
+    cuAboveRight = ctuX < Xmax && ctuY > 0    && pps->canFilterCtuBdry( ctuX, ctuY,  1,-1 ) ? cs.getCU( pos.offset( cuSize , -cuSize ), CH_L, TREE_D ): nullptr;
+    cuBelowLeft  = ctuX > 0    && ctuY < Ymax && pps->canFilterCtuBdry( ctuX, ctuY, -1, 1 ) ? cs.getCU( pos.offset( -cuSize, cuSize  ), CH_L, TREE_D ): nullptr;
+    cuBelowRight = ctuX < Xmax && ctuY < Ymax && pps->canFilterCtuBdry( ctuX, ctuY,  1, 1 ) ? cs.getCU( pos.offset( cuSize , cuSize  ), CH_L, TREE_D ): nullptr;
   }
   else
   {

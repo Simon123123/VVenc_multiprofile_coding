@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -93,7 +93,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 // macros to selectively disable some usually useful warnings
-#if __GNUC__ >= 8
+#if defined( __GNUC__ ) && __GNUC__ >= 8 && !defined( __clang__ )
 # define GCC_WARNING_DISABLE_maybe_uninitialized _Pragma("GCC diagnostic push"); \
                                                  _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"");
 # define GCC_WARNING_DISABLE_class_memaccess     _Pragma("GCC diagnostic push"); \
@@ -270,6 +270,8 @@ static constexpr int MAX_NUM_REF =                                     16; ///< 
 static constexpr int MAX_QP =                                          63;
 static constexpr int MAX_QP_PERCEPT_QPA =                              42; ///< max. base QP up to which CTU or sub-CTU QPA is used instead of frame QPA
 static constexpr int NOT_VALID =                                       -1;
+static constexpr int MI_NOT_VALID =                                    -1;
+static constexpr int MH_NOT_VALID =                                    -1;
 
 typedef enum
 {
@@ -568,6 +570,8 @@ static constexpr uint8_t MAX_TMP_BUFS = 6;
 
 static constexpr int QPA_MAX_NOISE_LEVELS = 8;
 
+
+
 // ====================================================================================================================
 // Macro functions
 // ====================================================================================================================
@@ -646,9 +650,11 @@ inline std::string prnt( const char* fmt, ...)
 
 #if ( _WIN32 && ( _MSC_VER > 1300 ) ) || defined (__MINGW64_VERSION_MAJOR)
 #define xMalloc( type, len )        _aligned_malloc( sizeof(type)*(len), MEMORY_ALIGN_DEF_SIZE )
+#define xMalloc2( type, len, alg )  _aligned_malloc( sizeof(type)*(len), alg )
 #define xFree( ptr )                _aligned_free  ( ptr )
 #elif defined (__MINGW32__)
 #define xMalloc( type, len )        __mingw_aligned_malloc( sizeof(type)*(len), MEMORY_ALIGN_DEF_SIZE )
+#define xMalloc2( type, len, alg )  __mingw_aligned_malloc( sizeof(type)*(len), alg )
 #define xFree( ptr )                __mingw_aligned_free( ptr )
 #else
 namespace detail {
@@ -663,11 +669,13 @@ static inline T* aligned_malloc(size_t len, size_t alignement) {
 }
 }
 #define xMalloc( type, len )        detail::aligned_malloc<type>( len, MEMORY_ALIGN_DEF_SIZE )
+#define xMalloc2( type, len, alg )  detail::aligned_malloc<type>( len, alg )
 #define xFree( ptr )                free( ptr )
 #endif
 
 #else
 #define xMalloc( type, len )        malloc   ( sizeof(type)*(len) )
+#define xMalloc2( type, len, alg )  malloc   ( sizeof(type)*(len) )
 #define xFree( ptr )                free     ( ptr )
 #endif //#if ALIGNED_MALLOC
 
@@ -700,22 +708,6 @@ static inline T* aligned_malloc(size_t len, size_t alignement) {
 #    define ALWAYS_INLINE
 #endif
 
-#ifdef TARGET_SIMD_X86
-typedef enum
-{
-  UNDEFINED = -1,
-  SCALAR = 0,
-  SSE41,
-  SSE42,
-  AVX,
-  AVX2,
-  AVX512
-} X86_VEXT;
-#endif
-
-template <typename ValueType> inline ValueType leftShiftU  (const ValueType value, const unsigned shift) { return value << shift; }
-template <typename ValueType> inline ValueType rightShiftU (const ValueType value, const unsigned shift) { return value >> shift; }
-
 #if defined( _WIN32 ) && defined( TARGET_SIMD_X86 )
 static inline unsigned int bit_scan_reverse( int a )
 {
@@ -737,17 +729,77 @@ static inline unsigned int bit_scan_reverse( int a )
 #endif
 
 #if ENABLE_SIMD_LOG2
+static inline int getLog2( int val )
+{
+  return bit_scan_reverse( val );
+}
+#else
+extern int8_t g_aucLog2[MAX_CU_SIZE + 1];
+static inline int getLog2( int val )
+{
+  CHECKD( g_aucLog2[2] != 1, "g_aucLog2[] has not been initialized yet." );
+  if( val > 0 && val < (int) sizeof( g_aucLog2 ) )
+  {
+    return g_aucLog2[val];
+  }
+  return std::log2( val );
+}
+#endif
+
+#if ENABLE_SIMD_OPT
+
+//necessary to be able to compare with SIMD_EVERYWHERE_EXTENSION_LEVEL in RdCostArm during compile time.
+#define X86_SIMD_UNDEFINED -1
+#define X86_SIMD_SCALAR 0
+#define X86_SIMD_SSE41 1
+#define X86_SIMD_SSE42 2
+#define X86_SIMD_AVX 3
+#define X86_SIMD_AVX2 4
+#define X86_SIMD_AVX512 5
+
+namespace x86_simd
+{
+#ifdef TARGET_SIMD_X86
+  typedef enum
+  {
+    UNDEFINED = X86_SIMD_UNDEFINED,
+    SCALAR = X86_SIMD_SCALAR,
+    SSE41 = X86_SIMD_SSE41,
+    SSE42 = X86_SIMD_SSE42,
+    AVX = X86_SIMD_AVX,
+    AVX2 = X86_SIMD_AVX2,
+    AVX512 = X86_SIMD_AVX512
+  } X86_VEXT;
+#endif
+}
+
+namespace arm_simd
+{
+#ifdef TARGET_SIMD_ARM
+  typedef enum
+  {
+    UNDEFINED = -1,
+    SCALAR    = 0,
+    NEON,
+  } ARM_VEXT;
+#endif   // TARGET_SIMD_ARM
+}   // namespace arm_simd
+
+#endif //ENABLE_SIMD_OPT
+
+template <typename ValueType> inline ValueType leftShiftU  (const ValueType value, const unsigned shift) { return value << shift; }
+template <typename ValueType> inline ValueType rightShiftU (const ValueType value, const unsigned shift) { return value >> shift; }
+
+#if ENABLE_SIMD_LOG2 && defined( TARGET_SIMD_X86 )
 static inline int floorLog2( int val )
 {
+  CHECKD(val == 0, "invalid input value");
   return bit_scan_reverse( val );
 }
 #else
 static inline int floorLog2(uint32_t x)
 {
-  if (x == 0)
-  {
-    return -1;
-  }
+  CHECKD( x == 0, "invalid input value");
 #ifdef __GNUC__
   return 31 - __builtin_clz(x);
 #else

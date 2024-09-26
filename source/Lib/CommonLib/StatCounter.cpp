@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -238,7 +238,7 @@ std::ostream& StatCounters::report2D( std::ostream& os, const StatCounter2DSet<T
   {
     OUTSTR( 0, " " );
     OUTSTR( numSymbolsInMantissa, (int)(cntAccumDimVer[i] / (double)scalingFactor) );
-    OUTSTR( numSymbolsInExp, "." );
+    OUTSTR( numSymbolsInExp, " " );
   }
 
   OUTSTR( 0, "\r\n" );

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -84,10 +84,13 @@ POSSIBILITY OF SUCH DAMAGE.
 
 namespace vvenc
 {
+
+using namespace x86_simd;
+
 const std::string& vext_to_string( X86_VEXT vext );
 X86_VEXT           string_to_vext( const std::string& ext_name );
 
-X86_VEXT           read_x86_extension_flags( X86_VEXT request = UNDEFINED );
+X86_VEXT           read_x86_extension_flags( X86_VEXT request = x86_simd::UNDEFINED );
 const std::string& read_x86_extension_name();
 
 

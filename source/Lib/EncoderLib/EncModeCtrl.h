@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -206,8 +206,8 @@ struct ComprCUCtx
     , skipSecondMTSPass     (false)
     , intraWasTested        (false)
     , relatedCuIsValid      (false)
-    , bestIntraMode         (0)
     , isIntra               (false)
+    , nonSkipWasTested      (false)
   {
   }
 
@@ -246,8 +246,8 @@ struct ComprCUCtx
   bool              skipSecondMTSPass;
   bool              intraWasTested;
   bool              relatedCuIsValid;
-  int               bestIntraMode;
   bool              isIntra;
+  bool              nonSkipWasTested;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -258,22 +258,20 @@ static const int MAX_STORED_CU_INFO_REFS = 4;
 
 struct CodedCUInfo
 {
-  bool isInter;
-  bool isIntra;
-  bool isSkip;
-  bool isMMVDSkip;
-  int  isMergeSimple;
-  bool isIBC;
-  uint8_t BcwIdx;
-  int  ctuRsAddr, poc;
-  uint8_t  numPuInfoStored;
-  bool validMv  [NUM_REF_PIC_LIST_01][MAX_STORED_CU_INFO_REFS];
-  Mv   saveMv   [NUM_REF_PIC_LIST_01][MAX_STORED_CU_INFO_REFS];
-  uint32_t puSse[SBT_NUM_SL];
-  uint8_t  puSbt[SBT_NUM_SL];
-  double bestCost;
-  bool   relatedCuIsValid;
-  int    bestIntraMode;
+  bool      relatedCuIsValid;
+  bool      isInter;
+  bool      isIntra;
+  bool      isSkip;
+  bool      isMMVDSkip;
+  bool      isIBC;
+  uint8_t   BcwIdx;
+  uint8_t   numPuInfoStored;
+  int       poc, ctuRsAddr;
+  bool      validMv[NUM_REF_PIC_LIST_01][MAX_STORED_CU_INFO_REFS];
+  Mv        saveMv [NUM_REF_PIC_LIST_01][MAX_STORED_CU_INFO_REFS];
+  uint32_t  puSse  [SBT_NUM_SL];
+  uint8_t   puSbt  [SBT_NUM_SL];
+  double    bestCost;
 
   bool getMv  ( const RefPicList refPicList, const int iRefIdx,       Mv& rMv ) const;
   void setMv  ( const RefPicList refPicList, const int iRefIdx, const Mv& rMv );

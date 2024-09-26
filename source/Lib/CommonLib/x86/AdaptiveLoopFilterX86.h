@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -48,6 +48,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 namespace vvenc
 {
+
+using namespace x86_simd;
 
 template<X86_VEXT vext>
 void simdDeriveClassificationBlk(AlfClassifier *classifier, const CPelBuf& srcLuma, const Area& blkDst, const Area& blk, const int shift, const int vbCTUHeight, int vbPos)
@@ -1151,9 +1153,9 @@ void simdFilterBlkCcAlf( const PelBuf &dstBuf, const CPelUnitBuf &recSrc, const 
   if( getChannelTypeScaleX( CH_C, nChromaFormat ) == 1 )
   {
     __m128i xfilterCoeff[4];
-    xfilterCoeff[0] = _mm_set1_epi32( ( filterCoeff[1] & 0xffff ) | ( filterCoeff[2] << 16 ) );
-    xfilterCoeff[1] = _mm_set1_epi32( ( filterCoeff[0] & 0xffff ) | ( filterCoeff[3] << 16 ) );
-    xfilterCoeff[2] = _mm_set1_epi32( ( filterCoeff[4] & 0xffff ) | ( filterCoeff[5] << 16 ) );
+    xfilterCoeff[0] = _mm_set1_epi32( ( filterCoeff[1] & 0xffff ) | ( filterCoeff[2] * (1<< 16 )));
+    xfilterCoeff[1] = _mm_set1_epi32( ( filterCoeff[0] & 0xffff ) | ( filterCoeff[3] * (1<< 16 )));
+    xfilterCoeff[2] = _mm_set1_epi32( ( filterCoeff[4] & 0xffff ) | ( filterCoeff[5] * (1<< 16 )));
     xfilterCoeff[3] = _mm_set1_epi32( ( filterCoeff[6] & 0xffff ) );
 
     for( int i = 0; i < endHeight - startHeight; i += clsSizeY )

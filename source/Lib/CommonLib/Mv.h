@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -222,6 +222,15 @@ public:
   void roundTransPrecInternal2Amvr(const int amvr)
   {
     roundToPrecision(MV_PRECISION_INTERNAL, m_amvrPrecision[amvr]);
+  }
+
+  void roundTransPrecInternal2AmvrVertical(const int amvr)
+  {
+    const int shift = MV_PRECISION_INTERNAL - Mv::m_amvrPrecision[amvr];
+    const int rightShift = shift;
+    const int nOffset = 1 << (rightShift - 1);
+    ver = ver >= 0 ? (ver + nOffset - 1) >> rightShift : (ver + nOffset) >> rightShift;
+    ver = ver << shift;
   }
 
   // affine MV

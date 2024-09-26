@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -158,6 +158,7 @@ enum DTRACE_CHANNEL
   D_MOT_COMP,             // Motion compensation
   D_ALF,
   D_ALF_EST,
+  D_CCALF_EST,
   D_CRC
 #if VVENC_STAT
   ,
@@ -222,6 +223,8 @@ void dtrace_frame_blockwise( CDTrace *trace_ctx, DTRACE_CHANNEL channel, Tsrc *b
 #define DTRACE_BLOCK(...)                    dtrace_block(__VA_ARGS__)
 #define DTRACE_FRAME_BLOCKWISE(...)          dtrace_frame_blockwise(__VA_ARGS__)
 #define DTRACE_GET_COUNTER(ctx,channel)      ctx->getChannelCounter(channel)
+#define DTRACE_ENABLE_CHANNEL(cond,ctx,channel) ctx->enableChannel( channel, (cond) )
+#define DTRACE_UPDATE_LOCAL(ctx,channel,s)      ctx->updateChannel( channel, s )
 
 inline CDTrace* tracing_init( const std::string& sTracingFile, const std::string& sTracingRule, MsgLog& msg )
 {
@@ -265,6 +268,7 @@ inline CDTrace* tracing_init( const std::string& sTracingFile, const std::string
     _CNL_DEF( D_MOT_COMP ),
     _CNL_DEF( D_ALF ),
     _CNL_DEF( D_ALF_EST ),
+    _CNL_DEF( D_CCALF_EST ),
     _CNL_DEF( D_CRC )
 #if VVENC_STAT
 	,_CNL_DEF( D_PART_STAT )
@@ -301,6 +305,8 @@ inline CDTrace* tracing_init( const std::string& sTracingFile, const std::string
 #define DTRACE_BLOCK(...)
 #define DTRACE_FRAME_BLOCKWISE(...)
 #define DTRACE_GET_COUNTER(ctx,channel)
+#define DTRACE_ENABLE_CHANNEL(cond,ctx,channel)
+#define DTRACE_UPDATE_LOCAL(ctx,channel,s)
 
 #endif
 

@@ -1,12 +1,12 @@
 /* -----------------------------------------------------------------------------
 The copyright in this software is being made available under the Clear BSD
-License, included below. No patent rights, trademark rights and/or 
-other Intellectual Property Rights other than the copyrights concerning 
+License, included below. No patent rights, trademark rights and/or
+other Intellectual Property Rights other than the copyrights concerning
 the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -40,4 +40,25 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------------------------- */
 
-#include "../InterpolationFilterX86.h"
+/** \file     CommonDefX86.cpp
+*/
+
+#include "CommonDefARM.h"
+
+namespace vvenc
+{
+using namespace arm_simd;
+
+ARM_VEXT read_arm_extension_flags( ARM_VEXT request )
+{
+  static ARM_VEXT ext_flags = NEON;   // We assume NEON is always supported for relevant ARM processors
+
+  if( request != UNDEFINED )
+  {
+    ext_flags = request;
+  }
+
+  return ext_flags;
+};
+
+}   // namespace

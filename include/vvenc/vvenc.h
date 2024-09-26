@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -44,8 +44,8 @@ POSSIBILITY OF SUCH DAMAGE.
   \brief   This file contains the external interface of the vvenc SDK.
 */
 
-#ifndef _VVENC_H_
-#define _VVENC_H_
+#ifndef VVENC_VVENC_H
+#define VVENC_VVENC_H
 
 #include "vvenc/vvencDecl.h"
 
@@ -65,6 +65,21 @@ extern "C" {
 
 VVENC_NAMESPACE_BEGIN
 
+#ifdef __GNUC__
+#    define VVENC_GCC_VERSION_AT_LEAST(x,y) (__GNUC__ > (x) || __GNUC__ == (x) && __GNUC_MINOR__ >= (y))
+#    define VVENC_GCC_VERSION_AT_MOST(x,y)  (__GNUC__ < (x) || __GNUC__ == (x) && __GNUC_MINOR__ <= (y))
+#else
+#    define VVENC_GCC_VERSION_AT_LEAST(x,y) 0
+#    define VVENC_GCC_VERSION_AT_MOST(x,y)  0
+#endif
+
+#if VVENC_GCC_VERSION_AT_LEAST(3,1)
+#    define attribute_deprecated __attribute__((deprecated))
+#elif defined(_MSC_VER)
+#    define attribute_deprecated __declspec(deprecated)
+#else
+#    define attribute_deprecated
+#endif
 
 
 /*
@@ -80,7 +95,7 @@ VVENC_NAMESPACE_BEGIN
  * opaque handler for the decoder */
 typedef struct vvencEncoder vvencEncoder;
 
-/* vvdecLoggingCallback:
+/* vvencLoggingCallback:
    callback function to receive messages of the encoder library
 */
 typedef void (*vvencLoggingCallback)(void*, int, const char*, va_list);
@@ -95,7 +110,7 @@ enum ErrorCodes
   VVENC_ERR_UNSPECIFIED      = -1,     // unspecified malfunction
   VVENC_ERR_INITIALIZE       = -2,     // encoder not initialized or tried to initialize multiple times
   VVENC_ERR_ALLOCATE         = -3,     // internal allocation error
-  VVENC_NOT_ENOUGH_MEM       = -5,     // allocated memory to small to receive encoded data. After allocating sufficient memory the failed call can be repeated.
+  VVENC_NOT_ENOUGH_MEM       = -5,     // allocated memory too small to receive encoded data. After allocating sufficient memory the failed call can be repeated.
   VVENC_ERR_PARAMETER        = -7,     // inconsistent or invalid parameters
   VVENC_ERR_NOT_SUPPORTED    = -10,    // unsupported request
   VVENC_ERR_RESTART_REQUIRED = -11,    // encoder requires restart
@@ -103,24 +118,24 @@ enum ErrorCodes
 };
 
 /*
-  The struct vvencYUVPlane contains the data of an plane of an uncompressed input picture.
+  The struct vvencYUVPlane contains the data of a plane of an uncompressed input picture.
 */
 typedef struct vvencYUVPlane
 {
   int16_t*  ptr;                       // pointer to plane buffer
   int       width;                     // width of the plane
   int       height;                    // height of the plane
-  int       stride;                    // stride (width + left margin + right margins) of plane in samples
+  int       stride;                    // stride (width + left margin + right margin) of plane in samples
 }vvencYUVPlane;
 
 /*
-  The struct vvencYUVBuffer contains the data and attributes to hand over the uncompressed input picture and metadata related to picture.
+  The struct vvencYUVBuffer contains the data and attributes to hand over the uncompressed input picture and metadata related to the picture.
 */
 typedef struct vvencYUVBuffer
 {
   vvencYUVPlane planes[ 3 ];           // plane buffer for 3 components (yuv)
   uint64_t      sequenceNumber;        // sequence number of the picture
-  uint64_t      cts;                   // composition time stamp in TicksPerSecond (see HEVCEncoderParameter)
+  uint64_t      cts;                   // composition time stamp in TicksPerSecond
   bool          ctsValid;              // composition time stamp valid flag (true: valid, false: CTS not set)
 }vvencYUVBuffer;
 
@@ -162,7 +177,7 @@ VVENC_DECL void vvenc_YUVBuffer_free_buffer( vvencYUVBuffer *yuvBuffer );
   The structure contains buffer and size information of the compressed payload as well as timing, access and debug information.
   The smallest output unit of VVC encoders are NalUnits. A set of NalUnits that belong to the same access unit are delivered in a continuous bitstream,
   where the NalUnits are separated by three byte start codes.
-  The Buffer to retrieve the compressed video chunks has to be allocated by the caller. The related attribute BufSize
+  The buffer (payload) to retrieve the compressed video chunks has to be allocated by the caller. The related attribute payloadSize must be set to the size of the buffer by the caller.
 */
 typedef struct vvencAccessUnit
 {
@@ -186,33 +201,33 @@ typedef struct vvencAccessUnit
 } vvencAccessUnit;
 
 /* vvenc_accessUnit_alloc:
-   Allocates an vvencAccessUnit instance.
+   Allocates a vvencAccessUnit instance.
    The returned accessUnit is set to default values.
    The payload memory must be allocated seperately by using vvenc_accessUnit_alloc_payload.
-   To free the memory use vvencAccessUnit_free.
+   To free the memory use vvenc_accessUnit_free.
 */
 VVENC_DECL vvencAccessUnit* vvenc_accessUnit_alloc( void );
 
-/* vvdec_accessUnit_free:
-   release storage of an vvdecAccessUnit instance.
+/* vvenc_accessUnit_free:
+   release storage of a vvencAccessUnit instance.
    The payload memory is also released if not done yet.
 */
 VVENC_DECL void vvenc_accessUnit_free(vvencAccessUnit *accessUnit, bool freePayload );
 
 /* vvenc_accessUnit_alloc_payload:
-   Allocates the memory for an accessUnit payload.
-   To free the memory use vvdecAccessUnit_free_payload.
+   Allocates the memory for a vvencAccessUnit payload.
+   To free the memory use vvenc_accessUnit_free_payload.
    When the vvencAccessUnit memory is released the payload memory is also released.
 */
 VVENC_DECL void vvenc_accessUnit_alloc_payload(vvencAccessUnit *accessUnit, int payload_size );
 
 /* vvenc_accessUnit_free_payload:
-   release storage of the payload in an vvencAccessUnit instance.
+   release storage of the payload in a vvencAccessUnit instance.
 */
 VVENC_DECL void vvenc_accessUnit_free_payload(vvencAccessUnit *accessUnit );
 
 /* vvenc_accessUnit_reset:
-  resets vvdencAccessUnit structure to its default values. payload data will not be resetted.
+  resets vvencAccessUnit structure to its default values. payload data will not be reset.
 */
 VVENC_DECL void vvenc_accessUnit_reset(vvencAccessUnit *accessUnit );
 
@@ -240,8 +255,8 @@ VVENC_DECL vvencEncoder* vvenc_encoder_create( void );
   This method initializes the encoder instance.
   This method is used to initially set up the encoder with the assigned encoder parameter struct.
   The method fails if the encoder is already initialized or if the assigned parameter struct
-  does not pass the consistency check. Other possibilities for an unsuccessful call are missing encoder license, or an machine with
-  insufficient CPU-capabilities.
+  does not pass the consistency check. Other possibilities for an unsuccessful call are missing encoder license, or a machine with
+  insufficient CPU capabilities.
   \param[in]  vvencEncoder pointer to opaque handler.
   \param[in]  vvenc_config* pointer to vvenc_config struct that holds initial encoder parameters.
   \retval     int  if non-zero an error occurred (see ErrorCodes), otherwise the return value indicates success VVENC_OK
@@ -289,14 +304,14 @@ VVENC_DECL int vvenc_init_pass( vvencEncoder *, int pass, const char * statsFNam
 
 /* vvenc_encode
   This method encodes a picture.
-  Uncompressed input pictures are passed to the encoder in display order. A compressed bitstream chunks is returned by filling the assigned AccessUnit struct.
-  Data in AcccessUnit struct are valid if the encoder call returns success and the UsedSize attribute is non-zero.
-  If the input parameter pcInputPicture is NULL, the encoder just returns a pending bitstream chunk if available.
-  If the call returns VVENC_NOT_ENOUGH_MEM, the BufSize attribute in AccessUnit struct indicates that the buffer is to small to retrieve the compressed data waiting for delivery.
+  Uncompressed input pictures are passed to the encoder in display order. A compressed bitstream chunk is returned by filling the assigned AccessUnit struct.
+  Data in AcccessUnit struct is valid if the encoder call returns success and the UsedSize attribute is non-zero.
+  If the input parameter YUVBuffer is NULL, the encoder just returns a pending bitstream chunk if available.
+  If the call returns VVENC_NOT_ENOUGH_MEM, the payloadSize attribute in AccessUnit struct indicates that the buffer is to small to retrieve the compressed data waiting for delivery.
   In this case the UsedSize attribute returns the minimum buffersize required to fetch the pending chunk. After allocating sufficient memory the encoder can retry the last call with the parameter pcInputPicture set to NULL to prevent encoding the last picture twice.
   \param[in]  vvencEncoder pointer to opaque handler
   \param[in]  pcYUVBuffer pointer to vvencYUVBuffer structure containing uncompressed picture data and meta information, to flush the encoder YUVBuffer must be NULL.
-  \param[out] accessUnit pointer to vvencAccessUnit that retrieves compressed access units and side information, data are valid if UsedSize attribute is non-zero and the call was successful.
+  \param[out] accessUnit pointer to vvencAccessUnit that retrieves compressed access units and side information, data is valid if UsedSize attribute is non-zero and the call was successful.
   \param[out] encodeDone pointer to flag that indicates that the encoder completed the last frame after flushing.
   \retval     int if non-zero an error occurred, otherwise the retval indicates success VVENC_OK
   \pre        The encoder has to be initialized successfully.
@@ -307,7 +322,7 @@ VVENC_DECL int vvenc_encode( vvencEncoder *, vvencYUVBuffer* YUVBuffer, vvencAcc
  This method fetches the current encoder configuration.
  The method fails if the encoder is not initialized.
  \param[in]  vvencEncoder pointer to opaque handler
- \param[in]  vvenc_config reference to an vvenc_config struct that returns the current encoder setup.
+ \param[in]  vvenc_config reference to a vvenc_config struct that returns the current encoder setup.
  \retval     int VVENC_ERR_INITIALIZE indicates the encoder was not successfully initialized in advance, otherwise the return value VVENC_OK indicates success.
  \pre        The encoder has to be initialized.
 */
@@ -318,7 +333,7 @@ VVENC_DECL int vvenc_get_config( vvencEncoder *,vvenc_config * );
  This method is used to change encoder settings during the encoding process when the encoder was already initialized.
  Some parameter changes might require an internal encoder restart, especially when previously used parameter sets VPS, SPS or PPS
  become invalid after the parameter change. If changes are limited to TargetBitRate or QP changes then the encoder continues encoding
- without interruption, using the new parameters. Some parameters e.g. NumTheads are not reconfigurable - in this case the encoder returns an Error.
+ without interruption, using the new parameters. Some parameters e.g. NumTheads, are not reconfigurable - in this case the encoder returns an Error.
  The method fails if the encoder is not initialized or if the assigned parameter set given in vvenc_config struct
  does not pass the consistency and parameter check.
  \param[in]  vvencEncoder pointer to opaque handler
@@ -406,7 +421,7 @@ VVENC_DECL int vvenc_set_logging_callback( void * ctx, vvencLoggingCallback call
 VVENC_DECL const char* vvenc_get_compile_info_string( void );
 
 /* vvenc_set_SIMD_extension
-  tries to set given simd extensions used. if not supported by cpu, highest possible extension level will be set and returned.
+  tries to set given simd extensions used. if not supported by CPU, highest possible extension level will be set and returned.
  \param      const char* simdId: empty string to set highest possible extension, otherwise set simd extension
  \retval[ ]  const char* current simd exentsion
 */
@@ -417,7 +432,7 @@ VVENC_DECL const char* vvenc_set_SIMD_extension( const char* simdId );
  \param      chFmt  Chroma Format
  \param      frameWidth width
  \param      compId component ID
- \retval[ ]  width of compontent
+ \retval[ ]  width of component
 */
 VVENC_DECL int  vvenc_get_width_of_component( const vvencChromaFormat chFmt, const int frameWidth, const int compId );
 
@@ -425,7 +440,7 @@ VVENC_DECL int  vvenc_get_width_of_component( const vvencChromaFormat chFmt, con
  \param      chFmt Chroma Format
  \param      frameHeight
  \param      compId component ID
- \retval[ ]  height of compontent
+ \retval[ ]  height of component
 */
 VVENC_DECL int  vvenc_get_height_of_component( const vvencChromaFormat chFmt, const int frameHeight, const int compId );
 
@@ -438,11 +453,13 @@ VVENC_DECL int  vvenc_get_height_of_component( const vvencChromaFormat chFmt, co
 VVENC_DECL bool  vvenc_is_tracing_enabled( void );
 
 /* vvenc_decode_bitstream
+* @deprecated
  \param[in]  FileName of bitstream that should be decoded
  \param[in]  trcFile filename of a trace rule file
  \param[in]  trcRule trace rules
  \retval     int VVENC_ERR_INITIALIZE indicates the encoder was not successfully initialized in advance, otherwise the return value VVENC_OK indicates success.
 */
+attribute_deprecated
 VVENC_DECL int   vvenc_decode_bitstream( const char* FileName, const char* trcFile, const char* trcRule);
 
 
@@ -452,4 +469,4 @@ VVENC_NAMESPACE_END
 }
 #endif /*__cplusplus */
 
-#endif /*_VVENC_H_*/
+#endif /*VVENC_VVENC_H*/

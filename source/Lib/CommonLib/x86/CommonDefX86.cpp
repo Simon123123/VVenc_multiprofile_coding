@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -266,7 +266,7 @@ X86_VEXT read_x86_extension_flags( X86_VEXT request )
   static const X86_VEXT max_supported = _get_x86_extensions();
   static X86_VEXT       ext_flags     = max_supported;
 #else
-  static const X86_VEXT max_supported = AVX;                               // disable AVX2 for non-x86 because the SIMD-Everywhere implementation is buggy
+  static const X86_VEXT max_supported = AVX2;                               // disable AVX2 for non-x86 because the SIMD-Everywhere implementation is buggy
   static X86_VEXT       ext_flags     = SIMD_EVERYWHERE_EXTENSION_LEVEL;   // default to SSE42 for WASM and SIMD-everywhere
 #endif
 
@@ -276,8 +276,6 @@ X86_VEXT read_x86_extension_flags( X86_VEXT request )
     {
 #ifdef REAL_TARGET_X86
       THROW( "requested SIMD level (" << request << ") not supported by current CPU (max " << max_supported << ")." );
-#else
-      THROW( "requested SIMD level (" << request << ") not supported because the SIMD-Everywhere implementation for AVX2 is buggy." );
 #endif
     }
 

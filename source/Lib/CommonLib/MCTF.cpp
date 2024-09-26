@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -66,8 +66,7 @@ static __itt_domain* itt_domain_MCTF_flt   = __itt_domain_create( "MCTFFlt" );
 
 const double MCTF::m_chromaFactor     =  0.55;
 const double MCTF::m_sigmaMultiplier  =  9.0;
-const double MCTF::m_sigmaZeroPoint   = 10.0;
-const int MCTF::m_range               = VVENC_MCTF_RANGE;
+const int MCTF::m_range               = VVENC_MCTF_RANGE-2;
 const int MCTF::m_motionVectorFactor  = 16;
 const int MCTF::m_padding             = MCTF_PADDING;
 const int16_t MCTF::m_interpolationFilter8[16][8] =
@@ -110,12 +109,11 @@ const int16_t MCTF::m_interpolationFilter4[16][4] =
   {  0,  4, 62, -2 },    //15-->-->
 };
 
-const double MCTF::m_refStrengths[3][4] =
+const double MCTF::m_refStrengths[2][6] = // min(..., {3 or 5} / (1 + 2 * |POC offset|))
 { // abs(POC offset)
-  //  1,    2     3     4
-  {0.85, 0.57, 0.41, 0.33},  // m_range * 2
-  {1.13, 0.97, 0.81, 0.57},  // m_range
-  {0.30, 0.30, 0.30, 0.30}   // otherwise
+  // 1       2       3       4       5       6
+  { 0.84375, 0.6, 0.4286, 0.3333, 0.2727, 0.2308 }, // RA
+  { 1.12500, 1.0, 0.7143, 0.5556, 0.4545, 0.3846 }  // LD
 };
 
 const int    MCTF::m_cuTreeThresh[4] = { 75, 60,     30, 15 };
@@ -368,7 +366,57 @@ inline static float fastExp( float n, float d )
   return x;
 }
 
-void applyBlockCore( const CPelBuf& src, PelBuf& dst, const CompArea& blk, const ClpRng& clpRng, const Pel** correctedPics, int numRefs, const int* verror, const double refStrenghts[4], double weightScaling, double sigmaSq )
+static const int32_t xSzm[6] = {0, 1, 20, 336, 5440, 87296};
+
+// works for bit depths up to incl. 12 and power-of-2 block dimensions in both directions
+void applyPlanarCorrectionCore( const Pel* refPel, const ptrdiff_t refStride, Pel* dstPel, const ptrdiff_t dstStride, const int32_t w, const int32_t h, const ClpRng& clpRng, const uint16_t motionError )
+{
+  const int32_t blockSize = w * h;
+  const int32_t log2Width = floorLog2 (w);
+  const int32_t maxPelVal = clpRng.max();
+  const int32_t mWeight   = std::min (512u, (uint32_t) motionError * (uint32_t) motionError);
+  const int32_t xSum      = (blockSize * (w - 1)) >> 1;
+  int32_t x1yzm = 0,  x2yzm = 0,  ySum = 0;
+  int32_t b0, b1, b2;
+  int64_t numer, denom;
+
+  for (int32_t y = 0; y < h; y++) // sum up dot-products between indices and sample diffs
+  {
+    for (int32_t x = 0; x < w; x++)
+    {
+      const Pel* pDst = dstPel + y * dstStride + x;
+      const Pel* pRef = refPel + y * refStride + x;
+      const int32_t z = *pDst - *pRef;
+
+      x1yzm += x * z;  x2yzm += y * z;  ySum += z;
+    }
+  }
+
+  denom = blockSize * xSzm[log2Width]; // plane-fit parameters, in fixed-point arithmetic
+  numer = (int64_t) mWeight * ((int64_t) x1yzm * blockSize - xSum * ySum);
+  b1 = int32_t ((numer < 0 ? numer - (denom >> 1) : numer + (denom >> 1)) / denom);
+  b1 = (b1 < INT16_MIN ? INT16_MIN : (b1 > INT16_MAX ? INT16_MAX : b1));
+  numer = (int64_t) mWeight * ((int64_t) x2yzm * blockSize - xSum * ySum);
+  b2 = int32_t ((numer < 0 ? numer - (denom >> 1) : numer + (denom >> 1)) / denom);
+  b2 = (b2 > INT16_MAX ? INT16_MAX : (b2 < INT16_MIN ? INT16_MIN : b2));
+  b0 = (mWeight * ySum - (b1 + b2) * xSum + (blockSize >> 1)) >> (log2Width << 1);
+
+  if (b0 == 0 && b1 == 0 && b2 == 0) return;
+
+  for (int32_t y = 0; y < h; y++) // perform deblocking by adding fitted correction plane
+  {
+    for (int32_t x = 0; x < w; x++)
+    {
+      Pel* const pDst = dstPel + y * dstStride + x;
+      const int32_t p = (b0 + b1 * x + b2 * y + 256) >> 9; // fixed-point plane corrector
+      const int32_t z = *pDst - p;
+
+      *pDst = Pel (z < 0 ? 0 : (z > maxPelVal ? maxPelVal : z));
+    }
+  }
+}
+
+void applyBlockCore( const CPelBuf& src, PelBuf& dst, const CompArea& blk, const ClpRng& clpRng, const Pel** correctedPics, int numRefs, const int* verror, const double* refStrenghts, double weightScaling, double sigmaSq )
 {
   const int         w = blk.width;
   const int         h = blk.height;
@@ -384,10 +432,10 @@ void applyBlockCore( const CPelBuf& src, PelBuf& dst, const CompArea& blk, const
   const Pel maxSampleValue = clpRng.max();
 
   int vnoise[2 * VVENC_MCTF_RANGE] = { 0, };
-  float vsw[2 * VVENC_MCTF_RANGE] = { 0.0f, };
-  float vww[2 * VVENC_MCTF_RANGE] = { 0.0f, };
+  float vsw [2 * VVENC_MCTF_RANGE] = { 0.0f, };
+  float vww [2 * VVENC_MCTF_RANGE] = { 0.0f, };
 
-  int minError = 9999999;
+  int minError = INT32_MAX;
 
   for( int i = 0; i < numRefs; i++ )
   {
@@ -419,6 +467,8 @@ void applyBlockCore( const CPelBuf& src, PelBuf& dst, const CompArea& blk, const
         }
       }
     }
+    variance <<= 2*(10-clpRng.bd);
+    diffsum <<= 2*(10-clpRng.bd);
     const int cntV = w * h;
     const int cntD = 2 * cntV - w - h;
     vnoise[i] = ( int ) round( ( 15.0 * cntD / cntV * variance + 5.0 ) / ( diffsum + 5.0 ) );
@@ -467,11 +517,40 @@ void applyBlockCore( const CPelBuf& src, PelBuf& dst, const CompArea& blk, const
   }
 }
 
+double calcVarCore( const Pel* org, const ptrdiff_t origStride, const int w, const int h )
+{
+  // calculate average
+  int avg = 0;
+  for( int y1 = 0; y1 < h; y1++ )
+  {
+    for( int x1 = 0; x1 < w; x1++ )
+    {
+      avg = avg + *( org + x1 + y1 * origStride );
+    }
+  }
+  avg <<= 4;
+  avg = avg / ( w * h );
+
+  // calculate variance
+  int64_t variance = 0;
+  for( int y1 = 0; y1 < h; y1++ )
+  {
+    for( int x1 = 0; x1 < w; x1++ )
+    {
+      int pix = *( org + x1 + y1 * origStride ) << 4;
+      variance = variance + ( pix - avg ) * ( pix - avg );
+    }
+  }
+
+  return variance / 256.0;
+}
+
 MCTF::MCTF()
-  : m_encCfg    ( nullptr )
-  , m_threadPool( nullptr )
-  , m_filterPoc ( 0 )
-  , m_lastPicIn ( nullptr )
+  : m_encCfg     ( nullptr )
+  , m_threadPool ( nullptr )
+  , m_isFinalPass( true )
+  , m_filterPoc  ( 0 )
+  , m_lastPicIn  ( nullptr )
 {
   m_motionErrorLumaIntX     = motionErrorLumaInt;
   m_motionErrorLumaInt8     = motionErrorLumaInt;
@@ -483,7 +562,9 @@ MCTF::MCTF()
   m_applyFrac[0][1]         = applyFrac8Core_4Tap;
   m_applyFrac[1][0]         = applyFrac8Core_6Tap;
   m_applyFrac[1][1]         = applyFrac8Core_4Tap;
+  m_applyPlanarCorrection   = applyPlanarCorrectionCore;
   m_applyBlock              = applyBlockCore;
+  m_calcVar                 = calcVarCore;
 
 #if defined( TARGET_SIMD_X86 ) && ENABLE_SIMD_OPT_MCTF
   initMCTF_X86();
@@ -494,21 +575,22 @@ MCTF::~MCTF()
 {
 }
 
-void MCTF::init( const VVEncCfg& encCfg, NoMallocThreadPool* threadPool )
+void MCTF::init( const VVEncCfg& encCfg, bool isFinalPass, NoMallocThreadPool* threadPool )
 {
   CHECK( encCfg.m_vvencMCTF.numFrames != encCfg.m_vvencMCTF.numStrength, "should have been checked before" );
 
-  m_encCfg     = &encCfg;
-  m_threadPool = threadPool;
-  m_area       = Area( 0, 0, m_encCfg->m_PadSourceWidth, m_encCfg->m_PadSourceHeight );
-  m_filterPoc  = 0;
+  m_encCfg      = &encCfg;
+  m_threadPool  = threadPool;
+  m_isFinalPass = isFinalPass;
+  m_filterPoc   = 0;
+  m_area        = Area( 0, 0, m_encCfg->m_PadSourceWidth, m_encCfg->m_PadSourceHeight );
 
   // TLayer (TL) dependent definition of drop frames: TL = 4,  TL = 3,  TL = 2,  TL = 1,  TL = 0
-  const static int sMCTFSpeed[5] { 0, 0, ((3<<12) + (2<<9) + (2<<6) + (0<<3) + 0),   ((3<<12) + (3<<9) + (2<<6) + (1<<3) + 0),   ((3<<12) + (3<<9) + (2<<6) + (2<<3) + 2) };
+  const static int sMCTFSpeed[5] { 0, 0, ((3<<12) + (2<<9) + (2<<6) + (0<<3) + 0),   ((3<<12) + (2<<9) + (2<<6) + (0<<3) + 0),   ((3<<12) + (3<<9) + (3<<6) + (2<<3) + 2) };
 
   m_MCTFSpeedVal     = sMCTFSpeed[ m_encCfg->m_vvencMCTF.MCTFSpeed ];
   m_lowResFltSearch  = m_encCfg->m_vvencMCTF.MCTFSpeed > 0;
-  m_searchPttrn      = m_encCfg->m_vvencMCTF.MCTFSpeed > 0 ? 1 : 0;
+  m_searchPttrn      = m_encCfg->m_vvencMCTF.MCTFSpeed > 0 ? ( m_encCfg->m_vvencMCTF.MCTFSpeed >= 3 ? 2 : 1 ) : 0;
   m_mctfUnitSize     = m_encCfg->m_vvencMCTF.MCTFUnitSize;
 }
 
@@ -523,10 +605,10 @@ void MCTF::initPicture( Picture* pic )
   pic->setSccFlags( m_encCfg );
 }
 
-void MCTF::processPictures( const PicList& picList, bool flush, AccessUnitList& auList, PicList& doneList, PicList& freeList )
+void MCTF::processPictures( const PicList& picList, AccessUnitList& auList, PicList& doneList, PicList& freeList )
 {
   // ensure this is only processed if necessary 
-  if( !flush && (picList.empty() || ( m_lastPicIn == picList.back())))
+  if( picList.empty() || ( m_lastPicIn == picList.back() && ! picList.back()->isFlush ))
   {
     return;
   }
@@ -575,6 +657,65 @@ void MCTF::processPictures( const PicList& picList, bool flush, AccessUnitList& 
   m_filterPoc += 1;
 }
 
+void MCTF::motionEstimationMCTF(Picture* curPic, std::deque<TemporalFilterSourcePicInfo> &srcFrameInfo, const PelStorage& origBuf, PelStorage& origSubsampled2, PelStorage& origSubsampled4, PelStorage& origSubsampled8, std::vector<double> &mvErr, double &minError, bool addLevel, bool calcErr)
+{
+  srcFrameInfo.push_back(TemporalFilterSourcePicInfo());
+  TemporalFilterSourcePicInfo& srcPic = srcFrameInfo.back();
+
+  const int wInBlks = (m_area.width + m_mctfUnitSize - 1) / m_mctfUnitSize;
+  const int hInBlks = (m_area.height + m_mctfUnitSize - 1) / m_mctfUnitSize;
+
+  srcPic.picBuffer.createFromBuf(curPic->getOrigBuf());
+  srcPic.mvs.allocate(wInBlks, hInBlks);
+  srcPic.index = std::min(5, std::abs(curPic->poc - m_filterPoc) - 1);
+
+
+  {
+    const int width = m_area.width;
+    const int height = m_area.height;
+    Array2D<MotionVector> mv_0(width / (m_mctfUnitSize * 8) + 1, height / (m_mctfUnitSize * 8) + 1);
+    Array2D<MotionVector> mv_1(width / (m_mctfUnitSize * 4) + 1, height / (m_mctfUnitSize * 4) + 1);
+    Array2D<MotionVector> mv_2(width / (m_mctfUnitSize * 2) + 1, height / (m_mctfUnitSize * 2) + 1);
+
+    PelStorage bufferSub2;
+    PelStorage bufferSub4;
+
+    subsampleLuma(srcPic.picBuffer, bufferSub2);
+    subsampleLuma(bufferSub2, bufferSub4);
+
+    if (addLevel)
+    {
+      Array2D<MotionVector> mv_m(width / (m_mctfUnitSize * 16) + 1, height / (m_mctfUnitSize * 16) + 1);
+      PelStorage bufferSub8;
+      subsampleLuma(bufferSub4, bufferSub8);
+      motionEstimationLuma(mv_m, origSubsampled8, bufferSub8, 2 * m_mctfUnitSize);
+      motionEstimationLuma(mv_0, origSubsampled4, bufferSub4, 2 * m_mctfUnitSize, &mv_m, 2);
+    }
+    else
+    {
+      motionEstimationLuma(mv_0, origSubsampled4, bufferSub4, 2 * m_mctfUnitSize);
+    }
+    motionEstimationLuma(mv_1, origSubsampled2, bufferSub2, 2 * m_mctfUnitSize, &mv_0, 2);
+    motionEstimationLuma(mv_2, origBuf, srcPic.picBuffer, 2 * m_mctfUnitSize, &mv_1, 2);
+
+    motionEstimationLuma(srcPic.mvs, origBuf, srcPic.picBuffer, m_mctfUnitSize, &mv_2, 1, true);
+
+    if (calcErr)
+    {
+      double sumErr = 0.0;
+      for (int y = 0; y < srcPic.mvs.h(); y++) // going over ref pic in block steps
+      {
+        for (int x = 0; x < srcPic.mvs.w(); x++)
+        {
+          sumErr += srcPic.mvs.get(x, y).error;
+        }
+      }
+      double S = 1.0 / (srcPic.mvs.w() * srcPic.mvs.h());
+      mvErr.push_back(sumErr * S);
+      minError = std::min(minError, sumErr * S);
+    }
+  }
+}
 
 void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
 {
@@ -582,11 +723,20 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
 
   Picture* pic = picFifo[ filterIdx ];
 
+  // first-pass temporal downsampling
+  if( ! m_isFinalPass && pic->gopEntry->m_skipFirstPass )
+  {
+    return;
+  }
+
   const int mctfIdx            = pic->gopEntry ? pic->gopEntry->m_mctfIndex : -1;
   const double overallStrength = mctfIdx >= 0 ? m_encCfg->m_vvencMCTF.MCTFStrengths[ mctfIdx ] : -1.0;
+  double   meanRmsAcrossPic    = 0.0;
+  uint64_t sumSRmsAcrossPic    = 0;
+  uint16_t nMax = 0, maxRmsCTU = 0;
   bool  isFilterThisFrame      = mctfIdx >= 0;
 
-  int dropFrames = 0;
+  int dropFrames = ( m_encCfg->m_usePerceptQPA ? VVENC_MCTF_RANGE >> 1 : 0 );
   if( mctfIdx >= 0 )
   {
     const int idxTLayer = m_encCfg->m_vvencMCTF.numFrames - (mctfIdx + 1);
@@ -596,26 +746,36 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
     isFilterThisFrame   = threshold < VVENC_MCTF_RANGE;
   }
 
-  const int filterFrames = VVENC_MCTF_RANGE - dropFrames;
+  const int filterFrames = VVENC_MCTF_RANGE - 2 - dropFrames;
 
-  int dropFramesFront = std::min( std::max(                                          filterIdx - filterFrames, 0 ), dropFrames );
-  int dropFramesBack  = std::min( std::max( static_cast<int>( picFifo.size() ) - 1 - filterIdx - filterFrames, 0 ), dropFrames );
+  int dropFramesFront = std::min( std::max(                                          filterIdx - filterFrames, 0 ), dropFrames + 2 );
+  int dropFramesBack  = std::min( std::max( static_cast<int>( picFifo.size() ) - 1 - filterIdx - filterFrames, 0 ), dropFrames + 2 );
 
-  if( ( overallStrength <= 1.0 || !m_encCfg->m_usePerceptQPA ) && !pic->useScMCTF )
+  if( !pic->useMCTF && !pic->gopEntry->m_isStartOfGop )
   {
     isFilterThisFrame = false;
   }
 
   if ( isFilterThisFrame )
   {
+    bool  useMCTFadaptation = true;
+    const bool condAddLevel = useMCTFadaptation && m_area.width >= 1920;
+    std::vector<double> mvErr;
+    double minError = MAX_DOUBLE;
+
     const PelStorage& origBuf = pic->getOrigBuffer();
           PelStorage& fltrBuf = pic->getFilteredOrigBuffer();
 
     // subsample original picture so it only needs to be done once
     PelStorage origSubsampled2;
     PelStorage origSubsampled4;
+    PelStorage origSubsampled8;
     subsampleLuma( origBuf,         origSubsampled2 );
     subsampleLuma( origSubsampled2, origSubsampled4 );
+    if (condAddLevel)
+    {
+      subsampleLuma(origSubsampled4, origSubsampled8);
+    }
 
     // determine motion vectors
     std::deque<TemporalFilterSourcePicInfo> srcFrameInfo;
@@ -626,46 +786,81 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
       {
         continue;
       }
-      srcFrameInfo.push_back( TemporalFilterSourcePicInfo() );
-      TemporalFilterSourcePicInfo &srcPic = srcFrameInfo.back();
+      motionEstimationMCTF(curPic, srcFrameInfo, origBuf, origSubsampled2, origSubsampled4, origSubsampled8 ,mvErr, minError, condAddLevel, useMCTFadaptation);
+    }
 
-      const int wInBlks = ( m_area.width  + m_mctfUnitSize - 1 ) / m_mctfUnitSize;
-      const int hInBlks = ( m_area.height + m_mctfUnitSize - 1 ) / m_mctfUnitSize;
+    int lastIndexRefFr = -1;
+    if ((m_encCfg->m_vvencMCTF.MCTFSpeed < 4) && (minError > 80))
+    {
+      useMCTFadaptation = false;
+    }
+    if (useMCTFadaptation && minError)
+    {
+      const double errThr = 0.75 * minError * srcFrameInfo.size();
+      int avgErrCond = 0;
+      int minErrCond = 0;
+      double factErr = m_encCfg->m_vvencMCTF.MCTFSpeed < 4 ? 1.0 : 2.0 ;
+      double SizeThi = m_encCfg->m_vvencMCTF.MCTFSpeed < 4  ? filterFrames + 1 : 3.0;
 
-      srcPic.picBuffer.createFromBuf( curPic->getOrigBuf() );
-      srcPic.mvs.allocate( wInBlks, hInBlks );
-
+      for (const double& framMvErr : mvErr)
       {
-        const int width  = m_area.width;
-        const int height = m_area.height;
-        Array2D<MotionVector> mv_0( width / ( m_mctfUnitSize * 8 ) + 1, height / ( m_mctfUnitSize * 8 ) + 1 );
-        Array2D<MotionVector> mv_1( width / ( m_mctfUnitSize * 4 ) + 1, height / ( m_mctfUnitSize * 4 ) + 1 );
-        Array2D<MotionVector> mv_2( width / ( m_mctfUnitSize * 2 ) + 1, height / ( m_mctfUnitSize * 2 ) + 1 );
-
-        PelStorage bufferSub2;
-        PelStorage bufferSub4;
-
-        subsampleLuma( srcPic.picBuffer, bufferSub2 );
-        subsampleLuma( bufferSub2,       bufferSub4 );
-
-        motionEstimationLuma( mv_0, origSubsampled4, bufferSub4,       2 * m_mctfUnitSize );
-        motionEstimationLuma( mv_1, origSubsampled2, bufferSub2,       2 * m_mctfUnitSize, &mv_0, 2 );
-        motionEstimationLuma( mv_2, origBuf,         srcPic.picBuffer, 2 * m_mctfUnitSize, &mv_1, 2 );
-
-        motionEstimationLuma( srcPic.mvs, origBuf,   srcPic.picBuffer,     m_mctfUnitSize, &mv_2, 1, true );
+        if (factErr * framMvErr > errThr)
+        {
+          avgErrCond++;
+        }
+        if (framMvErr > SizeThi * minError)
+        {
+          minErrCond++;
+        }
       }
+      int newFilterFrames = minErrCond ? filterFrames : (filterFrames + 2 - avgErrCond);
+      if (filterFrames <= 2 && newFilterFrames > 3)   newFilterFrames = 3;
 
-      srcPic.index = std::min( 3, std::abs( curPic->poc - m_filterPoc ) - 1 );
+      for (int curIdx = filterFrames + 1; (curIdx < newFilterFrames + 1)&&((lastIndexRefFr == -1)); curIdx++)
+      {
+        for (int i = 0; i < picFifo.size(); i++)
+        {
+          Picture* curPic = picFifo[i];
+          if (curIdx == std::abs(curPic->poc - m_filterPoc))
+          {
+            motionEstimationMCTF(curPic, srcFrameInfo, origBuf, origSubsampled2, origSubsampled4, origSubsampled8, mvErr, minError, condAddLevel, m_encCfg->m_vvencMCTF.MCTFSpeed == 4);
+            if (m_encCfg->m_vvencMCTF.MCTFSpeed == 4)
+            {
+              int nSize = (int(srcFrameInfo.size()) & 1) + int(srcFrameInfo.size());
+              const double errThrcur = 0.75 * minError * nSize;
+              if (mvErr.back() > errThrcur)
+              {
+                lastIndexRefFr = curIdx;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if ((lastIndexRefFr != -1))
+      {
+        for (auto it = srcFrameInfo.begin(); it != srcFrameInfo.end(); )
+        {
+          if ((it->index + 1) >= lastIndexRefFr)
+          {
+            it = srcFrameInfo.erase(it);
+          }
+          else
+          {
+            ++it;
+          }
+        }
+      }
     }
 
     // filter
-    if( pic->useScMCTF )
+    if( pic->useMCTF )
     {
       fltrBuf.create( m_encCfg->m_internChromaFormat, m_area, 0, m_padding );
       bilateralFilter( origBuf, srcFrameInfo, fltrBuf, overallStrength );
     }
 
-    if( m_encCfg->m_blockImportanceMapping || m_encCfg->m_usePerceptQPA )
+    if( m_encCfg->m_blockImportanceMapping || m_encCfg->m_usePerceptQPA || pic->gopEntry->m_isStartOfGop )
     {
       const int ctuSize        = m_encCfg->m_bimCtuSize;
       const int widthInCtus    = ( m_area.width  + ctuSize - 1 ) / ctuSize;
@@ -675,6 +870,7 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
 
       std::vector<double> sumError( numCtu * 2, 0 );
       std::vector<uint32_t> sumRMS( numCtu * 2, 0 ); // RMS of motion estimation error
+      std::vector<uint16_t> maxRMS( numCtu * 2, 0 ); // maximum block estimation error
       std::vector<double> blkCount( numCtu * 2, 0 );
 
       int distFactor[2] = { 3,3 };
@@ -699,30 +895,102 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
             const auto& mvBlk = srcPic.mvs.get( x, y );
             sumError[dist * numCtu + ctuId] += mvBlk.error;
             sumRMS  [dist * numCtu + ctuId] += mvBlk.rmsme;
+            maxRMS  [dist * numCtu + ctuId] = std::max( maxRMS[dist * numCtu + ctuId], mvBlk.rmsme );
             blkCount[dist * numCtu + ctuId] += mvBlk.overlap;
           }
         }
       }
 
-      if( distFactor[0] < 3 && distFactor[1] < 3 && m_encCfg->m_usePerceptQPA )
+      if( distFactor[0] < 3 && distFactor[1] < 3 && ( m_encCfg->m_usePerceptQPA || pic->gopEntry->m_isStartOfGop ) )
       {
-        const double bd12bScale = double (m_encCfg->m_internalBitDepth[CH_L] < 12 ? 1 << (12 - m_encCfg->m_internalBitDepth[CH_L]) : 1);
+        const double bd12bScale = double (m_encCfg->m_internalBitDepth[CH_L] < 12 ? 4 : 1);
 
         for( int i = 0; i < numCtu; i++ ) // start noise estimation with motion errors
         {
           const Position pos ((i % widthInCtus) * ctuSize, (i / widthInCtus) * ctuSize);
           const CompArea ctuArea  = clipArea (CompArea (COMP_Y, pic->chromaFormat, Area (pos.x, pos.y, ctuSize, ctuSize)), pic->Y());
           const unsigned avgIndex = pic->getOrigBuf (ctuArea).getAvg() >> (m_encCfg->m_internalBitDepth[CH_L] - 3); // one of 8 mean level regions
+          double meanInCTU;
 
           sumRMS[i] = std::min (sumRMS[i], sumRMS[i + numCtu]);
-          if (bd12bScale * sumRMS[i] < pic->m_picShared->m_minNoiseLevels[avgIndex] * blkCount[i])
+          meanInCTU = bd12bScale * sumRMS[i] / blkCount[i];
+          meanRmsAcrossPic += meanInCTU;
+          if (meanInCTU < pic->m_picShared->m_minNoiseLevels[avgIndex])
           {
-            pic->m_picShared->m_minNoiseLevels[avgIndex] = uint8_t (0.5 + bd12bScale * sumRMS[i] / blkCount[i]); // scaled to 12 bit, see also QPA
+            pic->m_picShared->m_minNoiseLevels[avgIndex] = uint8_t (0.5 + meanInCTU); // scaled to 12 bit, see filterAndCalculateAverageActivity()
+          }
+
+          maxRMS[i] = std::min (maxRMS[i], maxRMS[i + numCtu]);
+          maxRmsCTU = std::max (maxRmsCTU, maxRMS[i]);
+          sumSRmsAcrossPic += (uint64_t) maxRMS[i] * maxRMS[i];
+          if (maxRMS[i] > 0)
+          {
+            nMax++; // count all CTUs with non-zero motion error (excludes e.g. black borders). CTU with the motion error peak is subtracted below
+          }
+        }
+        pic->m_picShared->m_picMotEstError = uint16_t (0.5 + meanRmsAcrossPic / numCtu);
+
+        if( pic->gopEntry->m_isStartOfGop && !pic->useMCTF && m_encCfg->m_vvencMCTF.MCTF > 0 && meanRmsAcrossPic > numCtu * 27.0 )
+        {
+          // check application (re-enabling) of MCTF filter for key pictures, in case MCTF has been disabled based on SCC detection
+          bool allNoiseZero = true;
+          for( int i = 0; i < QPA_MAX_NOISE_LEVELS; i++ )
+          {
+            if( pic->m_picShared->m_minNoiseLevels[i] && pic->m_picShared->m_minNoiseLevels[i] < 255 )
+            {
+              allNoiseZero = false;
+              break;
+            }
+          }
+          int numZeroRMSCtus = 0;
+          if( allNoiseZero )
+          {
+            for( int i = 0; i < numCtu; i++ )
+            {
+              if( sumRMS[i] == 0 )
+              {
+                numZeroRMSCtus += 1;
+              }
+            }
+          }
+          const bool doFilter = ( numZeroRMSCtus * 100 <= numCtu * 6 );
+          if( doFilter )
+          {
+            fltrBuf.create( m_encCfg->m_internChromaFormat, m_area, 0, m_padding );
+            bilateralFilter( origBuf, srcFrameInfo, fltrBuf, overallStrength );
           }
         }
       }
+      if (m_encCfg->m_forceScc <= 0)
+      {
+        bool forceSCC = false;
+        if (pic->gopEntry->m_isStartOfGop)
+        {
+          forceSCC = true;
+          for (int j = 0; j < QPA_MAX_NOISE_LEVELS; j++)
+          {
+            if (pic->m_picShared->m_minNoiseLevels[j] < 255 && pic->m_picShared->m_minNoiseLevels[j])
+            {
+              forceSCC = false;
+              break;
+            }
+          }
+          if (forceSCC)
+          {
+            for (int s = 0; s < mvErr.size(); s++)
+            {
+              if (int(mvErr[s]) == 0)
+              {
+                forceSCC = false;
+                break;
+              }
+            }
+          }
+        }
+        pic->m_picShared->m_forceSCC = forceSCC;
+      }
 
-      if( !m_encCfg->m_blockImportanceMapping || !pic->useScMCTF )
+      if( !m_encCfg->m_blockImportanceMapping || !pic->useMCTF )
       {
         CHECKD( !pic->m_picShared->m_ctuBimQpOffset.empty(), "BIM disabled, but offset vector not empty!" );
         return;
@@ -732,7 +1000,11 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
 
       if( distFactor[0] < 3 && distFactor[1] < 3 )
       {
-        const double weight = std::min( 1.0, overallStrength ); // was pic->TLayer > 1 ? 0.6 : 1;
+        const double weight = std::min( 1.0, overallStrength );
+        const double factor = std::min( 1.0, sqrt((1920.0 * 1080.0) / double (m_encCfg->m_SourceWidth * m_encCfg->m_SourceHeight)) ) * ( (double) m_encCfg->m_QP / (MAX_QP + 1.0) );
+        int sumCtuQpOffsets = 0;
+
+        meanRmsAcrossPic = (!m_encCfg->m_usePerceptQPA || !m_encCfg->m_salienceBasedOpt || maxRmsCTU == 0 || nMax < 2 ? 65535.0 : sqrt (double (sumSRmsAcrossPic - (uint64_t) maxRmsCTU * maxRmsCTU) / (nMax - 1.0)));
 
         for( int i = 0; i < numCtu; i++ )
         {
@@ -760,7 +1032,19 @@ void MCTF::filter( const std::deque<Picture*>& picFifo, int filterIdx )
             qpOffset = -1;
           }
 
+          if (meanRmsAcrossPic < maxRMS[i] * factor)
+          {
+            qpOffset += int (6.0 * log (std::max ((ctuSize > 64 ? 0.625 : 0.5) * maxRMS[i] * factor, meanRmsAcrossPic) / (maxRMS[i] * factor)) / (sqrt (weight) * log (2.0)) - 0.5);
+          }
+
           pic->m_picShared->m_ctuBimQpOffset[i] = qpOffset;
+          sumCtuQpOffsets += qpOffset;
+        }
+
+        pic->m_picShared->m_picAuxQpOffset = ( sumCtuQpOffsets + ( sumCtuQpOffsets < 0 ? -(numCtu >> 1) : numCtu >> 1 ) ) / numCtu; // pic average
+        for( int i = 0; i < numCtu; i++ )
+        {
+          pic->m_picShared->m_ctuBimQpOffset[i] -= pic->m_picShared->m_picAuxQpOffset; // delta-QP relative to above average, see xGetQPForPicture
         }
       }
       else
@@ -874,18 +1158,18 @@ int MCTF::motionErrorLuma(const PelStorage &orig,
 }
 
 bool MCTF::estimateLumaLn( std::atomic_int& blockX_, std::atomic_int* prevLineX, Array2D<MotionVector> &mvs, const PelStorage &orig, const PelStorage &buffer, const int blockSize,
-  const Array2D<MotionVector> *previous, const int factor, const bool doubleRes, int blockY ) const
+  const Array2D<MotionVector> *previous, const int factor, const bool doubleRes, int blockY, int bitDepth ) const
 {
   PROFILER_SCOPE_AND_STAGE( 1, _TPROF, P_MCTF_SEARCH );
 
   const int stepSize = blockSize;
   const int origWidth  = orig.Y().width;
 
-  for( int blockX = blockX_.load(); blockX + 7 <= origWidth; blockX += stepSize, blockX_.store( blockX) )
+  for( int blockX = blockX_.load(); blockX + 8 <= origWidth; blockX += stepSize, blockX_.store( blockX) )
   {
     if( prevLineX && blockX >= prevLineX->load() ) return false;
 
-    int range = doubleRes ? 0 : 5;
+    int range = doubleRes ? 0 : ( m_searchPttrn == 2 ? 3 : 5 );
     const int stepSize = blockSize;
 
     MotionVector best;
@@ -924,14 +1208,15 @@ bool MCTF::estimateLumaLn( std::atomic_int& blockX_, std::atomic_int* prevLineX,
       }
     }
     MotionVector prevBest = best;
-    for (int y2 = prevBest.y / m_motionVectorFactor - range; y2 <= prevBest.y / m_motionVectorFactor + range; y2++)
+    const int d = previous == NULL && m_searchPttrn == 2 ? 2 : 1;
+    for( int y2 = prevBest.y / m_motionVectorFactor - range; y2 <= prevBest.y / m_motionVectorFactor + range; y2 += d )
     {
-      for (int x2 = prevBest.x / m_motionVectorFactor - range; x2 <= prevBest.x / m_motionVectorFactor + range; x2++)
+      for( int x2 = prevBest.x / m_motionVectorFactor - range; x2 <= prevBest.x / m_motionVectorFactor + range; x2 += d )
       {
-        int error = motionErrorLuma(orig, buffer, blockX, blockY, x2 * m_motionVectorFactor, y2 * m_motionVectorFactor, blockSize, best.error);
-        if (error < best.error)
+        int error = motionErrorLuma( orig, buffer, blockX, blockY, x2 * m_motionVectorFactor, y2 * m_motionVectorFactor, blockSize, best.error );
+        if( error < best.error )
         {
-          best.set(x2 * m_motionVectorFactor, y2 * m_motionVectorFactor, error);
+          best.set( x2 * m_motionVectorFactor, y2 * m_motionVectorFactor, error );
         }
       }
     }
@@ -941,11 +1226,12 @@ bool MCTF::estimateLumaLn( std::atomic_int& blockX_, std::atomic_int* prevLineX,
 
       prevBest = best;
       int doubleRange = m_searchPttrn ? 6 : 12;
+      const int d1 = m_searchPttrn == 2 ? 6 : 4;
 
-      // first iteration, 49 - 1 or 16 checks
-      for( int y2 = -doubleRange; y2 <= doubleRange; y2 += 4 )
+      // first iteration, 49 - 1 or 16 checks or 9 - 1 checks
+      for( int y2 = -doubleRange; y2 <= doubleRange; y2 += d1 )
       {
-        for( int x2 = -doubleRange; x2 <= doubleRange; x2 += 4 )
+        for( int x2 = -doubleRange; x2 <= doubleRange; x2 += d1 )
         {
           if( x2 || y2 )
           {
@@ -1013,37 +1299,20 @@ bool MCTF::estimateLumaLn( std::atomic_int& blockX_, std::atomic_int* prevLineX,
       }
     }
 
-    const int w = std::min<int>( blockSize, orig.Y().width  - blockX ) & ~7;
-    const int h = std::min<int>( blockSize, orig.Y().height - blockY ) & ~7;
-
-    // calculate average
-    int avg = 0;
-    for( int y1 = 0; y1 < h; y1++ )
+    if( doubleRes )
     {
-      for( int x1 = 0; x1 < w; x1++ )
-      {
-        avg = avg + orig.Y().at( blockX + x1, blockY + y1 );
-      }
-    }
-    avg <<= 4;
-    avg   = avg / ( w * h );
+      const int w = std::min<int>( blockSize, orig.Y().width  - blockX ) & ~7;
+      const int h = std::min<int>( blockSize, orig.Y().height - blockY ) & ~7;
 
-    // calculate variance
-    int64_t variance = 0;
-    for( int y1 = 0; y1 < h; y1++ )
-    {
-      for( int x1 = 0; x1 < w; x1++ )
-      {
-        int pix = orig.Y().at( blockX + x1, blockY + y1 ) << 4;
-        variance = variance + ( pix - avg ) * ( pix - avg );
-      }
-    }
-    const double dvar = variance / 256.0; // 16.0 * 16.0
-    const double mse  = best.error / double( w * h );
+      CHECKD(bitDepth>10, "unsupported internal bit depth (also in calcVar)" );
+      const double bdScale = double(1<<(2*(10-bitDepth)));
+      const double dvar = m_calcVar( orig.Y().bufAt( blockX, blockY ), orig.Y().stride, w, h ) * bdScale;
+      const double mse  = best.error * bdScale / double( w * h );
 
-    best.error   = ( int ) ( 20 * ( ( best.error + 5.0 ) / ( dvar + 5.0 ) ) + mse / 50.0 );
-    best.rmsme   = uint16_t( 0.5 + sqrt( mse ) );
-    best.overlap = ( ( double ) w * h ) / ( m_mctfUnitSize * m_mctfUnitSize );
+      best.error   = ( int ) ( 20 * ( ( best.error*bdScale + 5.0 ) / ( dvar + 5.0 ) ) + mse / 50.0 );
+      best.rmsme   = uint16_t( 0.5 + sqrt( mse ) );
+      best.overlap = ( ( double ) w * h ) / ( m_mctfUnitSize * m_mctfUnitSize );
+    }
 
     mvs.get(blockX / stepSize, blockY / stepSize) = best;
   }
@@ -1055,6 +1324,7 @@ void MCTF::motionEstimationLuma(Array2D<MotionVector> &mvs, const PelStorage &or
 {
   const int stepSize = blockSize;
   const int origHeight = orig.Y().height;
+  const int bitDepth = m_encCfg->m_internalBitDepth[CH_L];
 
   if( m_threadPool )
   {
@@ -1070,6 +1340,7 @@ void MCTF::motionEstimationLuma(Array2D<MotionVector> &mvs, const PelStorage &or
       int   factor; 
       bool  doubleRes;
       int   blockY;
+      int   bitDepth;
       const MCTF* mctf;
     };
 
@@ -1077,13 +1348,13 @@ void MCTF::motionEstimationLuma(Array2D<MotionVector> &mvs, const PelStorage &or
 
     WaitCounter taskCounter;
 
-    for( int n = 0, blockY = 0; blockY + 7 <= origHeight; blockY += stepSize, n++ )
+    for( int n = 0, blockY = 0; blockY + 8 <= origHeight; blockY += stepSize, n++ )
     {
       static auto task = []( int tId, EstParams* params)
       {
         ITT_TASKSTART( itt_domain_MCTF_est, itt_handle_est );
 
-        bool ret = params->mctf->estimateLumaLn( params->blockX, params->prevLineX, *params->mvs, *params->orig, *params->buffer, params->blockSize, params->previous, params->factor, params->doubleRes, params->blockY );
+        bool ret = params->mctf->estimateLumaLn( params->blockX, params->prevLineX, *params->mvs, *params->orig, *params->buffer, params->blockSize, params->previous, params->factor, params->doubleRes, params->blockY, params->bitDepth );
 
         ITT_TASKEND( itt_domain_MCTF_est, itt_handle_est );
         return ret;
@@ -1101,6 +1372,7 @@ void MCTF::motionEstimationLuma(Array2D<MotionVector> &mvs, const PelStorage &or
       cEstParams.doubleRes = doubleRes;
       cEstParams.mctf = this;
       cEstParams.blockY = blockY;
+      cEstParams.bitDepth = bitDepth;
 
       m_threadPool->addBarrierTask<EstParams>( task, &cEstParams, &taskCounter);
     }
@@ -1108,10 +1380,10 @@ void MCTF::motionEstimationLuma(Array2D<MotionVector> &mvs, const PelStorage &or
   }
   else
   {
-    for( int blockY = 0; blockY + 7 <= origHeight; blockY += stepSize )
+    for( int blockY = 0; blockY + 8 <= origHeight; blockY += stepSize )
     {
       std::atomic_int blockX( 0 ), prevBlockX( orig.Y().width + stepSize );
-      estimateLumaLn( blockX, blockY ? &prevBlockX : nullptr, mvs, orig, buffer, blockSize, previous, factor, doubleRes, blockY );
+      estimateLumaLn( blockX, blockY ? &prevBlockX : nullptr, mvs, orig, buffer, blockSize, previous, factor, doubleRes, blockY, bitDepth );
     }
 
   }
@@ -1123,18 +1395,10 @@ void MCTF::xFinalizeBlkLine( const PelStorage &orgPic, std::deque<TemporalFilter
 
   const int numRefs = int(srcFrameInfo.size());
 
-  int refStrengthRow = 2;
-  if( numRefs == m_range * 2 )
-  {
-    refStrengthRow = 0;
-  }
-  else if( numRefs == m_range )
-  {
-    refStrengthRow = 1;
-  }
+  int refStrengthRow = m_encCfg->m_picReordering ? 0 : 1;
 
-  // max 64*64*8*2 = 2^(6+6+3+1)=2^16=64kbps, usually 16*16*8*2=2^(4+4+3+1)=4kbps
-  Pel* dstBufs = ( Pel* ) alloca( sizeof( Pel ) * numRefs * m_mctfUnitSize * m_mctfUnitSize );
+  // max 64*64*8*2 = 2^(6+6+3+1)=2^16=64kbps, usually 16*16*8*2=2^(4+4+3+1)=4kbps, and allow for overread of one line
+  Pel* dstBufs = ( Pel* ) alloca( sizeof( Pel ) * ( numRefs * m_mctfUnitSize * m_mctfUnitSize + m_mctfUnitSize ) );
 
   for( int c = 0; c < getNumberValidComponents( m_encCfg->m_internChromaFormat ); c++ )
   {
@@ -1200,6 +1464,11 @@ void MCTF::xFinalizeBlkLine( const PelStorage &orgPic, std::deque<TemporalFilter
             m_applyFrac[toChannelType( compID )][0]( src, srcStride, dst, dstStride, w, h, xFilter, yFilter, m_encCfg->m_internalBitDepth[toChannelType( compID )] );
           }
 
+          if( mv.rmsme > 0 && m_encCfg->m_QP <= 32 && w == h && w <= 32 ) // "deblocking"
+          {
+            m_applyPlanarCorrection( orgPic.bufs[c].bufAt( bx, by ), orgPic.bufs[c].stride, dst, dstStride, w, h, clpRng, mv.rmsme );
+          }
+
           verror[i] = mv.error;
           refStr[i] = m_refStrengths[refStrengthRow][srcFrameInfo[i].index];
         }
@@ -1212,7 +1481,7 @@ void MCTF::xFinalizeBlkLine( const PelStorage &orgPic, std::deque<TemporalFilter
 
 void MCTF::bilateralFilter(const PelStorage& orgPic, std::deque<TemporalFilterSourcePicInfo>& srcFrameInfo, PelStorage& newOrgPic, double overallStrength) const
 {
-  const double lumaSigmaSq = (m_encCfg->m_QP - m_sigmaZeroPoint) * (m_encCfg->m_QP - m_sigmaZeroPoint) * m_sigmaMultiplier;
+  const double lumaSigmaSq = m_sigmaMultiplier * ( 128.0 + 3.0 / 256.0 * m_encCfg->m_QP * m_encCfg->m_QP * m_encCfg->m_QP );
   const double chromaSigmaSq = 30 * 30;
 
   double sigmaSqCh[MAX_NUM_CH];

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -254,18 +254,21 @@ int calcAndPrintHashStatus(const CPelUnitBuf& pic, const SEIDecodedPictureHash* 
     switch (pictureHashSEI->method)
     {
       case VVENC_HASHTYPE_MD5:
+      case VVENC_HASHTYPE_MD5_LOG:
         {
           hashType = "MD5";
           numChar = calcMD5(pic, recon_digest, bitDepths);
           break;
         }
       case VVENC_HASHTYPE_CRC:
+      case VVENC_HASHTYPE_CRC_LOG:
         {
           hashType = "CRC";
           numChar = calcCRC(pic, recon_digest, bitDepths);
           break;
         }
       case VVENC_HASHTYPE_CHECKSUM:
+      case VVENC_HASHTYPE_CHECKSUM_LOG:
         {
           hashType = "Checksum";
           numChar = calcChecksum(pic, recon_digest, bitDepths);

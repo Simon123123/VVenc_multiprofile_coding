@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -41,7 +41,7 @@ POSSIBILITY OF SUCH DAMAGE.
 ------------------------------------------------------------------------------------------- */
 
 /**
-  \ingroup hhivvcdeclibExternalInterfaces
+  \ingroup vvenc
   \file    vvencimpl.cpp
   \brief   This file contains the internal interface of the vvenc SDK.
 */
@@ -70,6 +70,9 @@ POSSIBILITY OF SUCH DAMAGE.
 #  include <malloc.h>
 #endif
 
+#if defined( TARGET_SIMD_ARM )
+#  include "CommonLib/arm/CommonDefARM.h"
+#endif
 
 #if _DEBUG
 #define HANDLE_EXCEPTION 0
@@ -87,8 +90,6 @@ namespace vvenc {
 static_assert( sizeof(Pel)  == sizeof(*(vvencYUVPlane::ptr)),   "internal bits per pel differ from interface definition" );
 
 // ====================================================================================================================
-
-bool tryDecodePicture( Picture* pic, const int expectedPoc, const std::string& bitstreamFileName, FFwdDecoder& ffwdDecoder, ParameterSetMap<APS>* apsMap, MsgLog& logger, bool bDecodeUntilPocFound = false, int debugPOC = -1, bool copyToEnc = true );
 
 VVEncImpl::VVEncImpl()
 {
@@ -341,6 +342,12 @@ int VVEncImpl::encode( vvencYUVBuffer* pcYUVBuffer, vvencAccessUnit* pcAccessUni
       }
     }
 
+    if ( ! xConvertVerifyYUVBuffer( pcYUVBuffer ) )
+    {     
+      m_cErrorString = "InputPicture: Source image contains values outside the specified bit range";
+      return VVENC_ERR_UNSPECIFIED;
+    }
+
     if( m_eState == INTERNAL_STATE_INITIALIZED ){ m_eState = INTERNAL_STATE_ENCODING; }
   }
   else
@@ -554,6 +561,50 @@ int VVEncImpl::printSummary() const
   return 0;
 }
 
+bool VVEncImpl::xConvertVerifyYUVBuffer( vvencYUVBuffer* pcYUVBuffer )
+{
+  if( pcYUVBuffer == nullptr ){ return false; }
+
+  bool conv8bit = false;
+  if ( m_cVVEncCfg.m_inputBitDepth[0] == 10 && m_cVVEncCfg.m_internalBitDepth[0] == 8 &&
+       m_cVVEncCfg.m_inputBitDepth[0] == m_cVVEncCfg.m_MSBExtendedBitDepth[0] )
+  {
+    conv8bit = true;
+  }
+
+  const int numComp  = (m_cVVEncCfg.m_internChromaFormat==VVENC_CHROMA_400) ? 1 : 3;
+  const int16_t mask = ~( ( 1 << m_cVVEncCfg.m_internalBitDepth[0] ) - 1 );
+  int dstSum = 0;
+  for( int comp = 0; comp < numComp; comp++ )
+  {
+    vvencYUVPlane& plane = pcYUVBuffer->planes[ comp ];
+    int16_t* dst     = plane.ptr;
+
+    if ( conv8bit )
+    {
+      for( int y = 0; y < plane.height; y++, dst += plane.stride )
+      {
+        for( int x = 0; x < plane.width; x++ )
+        {
+          dst[ x ] = (Pel)std::min<Pel>( 255, ( dst[x] + 2 ) >> 2 );
+          dstSum |= dst[ x ] & mask;
+        }
+      }
+    }
+    else
+    {
+      for( int y = 0; y < plane.height; y++, dst += plane.stride )
+      {
+        for( int x = 0; x < plane.width; x++ )
+        {
+          dstSum |= dst[ x ] & mask;
+        }
+      }
+    }
+  }
+  return (dstSum != 0) ? false : true;
+}
+
 int VVEncImpl::xGetAccessUnitsSize( const vvenc::AccessUnitList& rcAuList )
 {
   uint32_t sizeSum = 0;
@@ -749,6 +800,9 @@ const char* VVEncImpl::setSIMDExtension( const char* simdId )
     try
     {
       read_x86_extension_flags( request_ext );
+#if defined( TARGET_SIMD_ARM )
+      read_arm_extension_flags( request_ext == x86_simd::UNDEFINED ? arm_simd::UNDEFINED : request_ext != x86_simd::SCALAR ? arm_simd::NEON : arm_simd::SCALAR );
+#endif
     }
     catch( Exception& )
     {
@@ -756,23 +810,28 @@ const char* VVEncImpl::setSIMDExtension( const char* simdId )
       THROW( "requested SIMD level (" << simdReqStr << ") not supported by current CPU (max " << read_x86_extension_name() << ")." );
     }
 
-#  if ENABLE_SIMD_OPT_BUFFER
+#if ENABLE_SIMD_OPT_BUFFER
+  #if defined( TARGET_SIMD_X86 )
     g_pelBufOP.initPelBufOpsX86();
-#  endif
-#  if ENABLE_SIMD_TRAFO
-    g_tCoeffOps.initTCoeffOpsX86();
-#  endif
+  #endif
+  #if defined( TARGET_SIMD_ARM )
+    g_pelBufOP.initPelBufOpsARM();
+  #endif
+#endif
+#if ENABLE_SIMD_TRAFO
+  g_tCoeffOps.initTCoeffOpsX86();
+#endif
 
     return read_x86_extension_name().c_str();
   }
-#  if HANDLE_EXCEPTION
+#if HANDLE_EXCEPTION
   catch( Exception& e )
   {
     MsgLog msg;
     msg.log( VVENC_ERROR, "\n%s\n", e.what() );
     return nullptr;
   }
-#  endif   // HANDLE_EXCEPTION
+#endif   // HANDLE_EXCEPTION
 #else      // !TARGET_SIMD_X86
   if( !simdReqStr.empty() && simdReqStr != "SCALAR" )
   {
@@ -807,49 +866,19 @@ std::string VVEncImpl::createEncoderInfoStr()
 
 
   std::string cInfoStr;
-  cInfoStr  = "Fraunhofer VVC Encoder ver. " VVENC_VERSION;
+  cInfoStr  = "VVenC, the Fraunhofer H.266/VVC Encoder, version " VVENC_VERSION;
   cInfoStr += " ";
   cInfoStr += cssCap.str();
 
   return cInfoStr;
 }
 
-///< decode bitstream with limited build in decoder
+///< decode bitstream is deprecated and will be removed
 int VVEncImpl::decodeBitstream( const char* FileName, const char* trcFile, const char* trcRule)
 {
-  int ret = 0;
-  FFwdDecoder ffwdDecoder;
-  Picture cPicture; cPicture.poc=-8000;
   MsgLog msg;
-
-#if ENABLE_TRACING
-  g_trace_ctx = tracing_init( trcFile, trcRule, msg );
-#endif
-
-  std::string filename(FileName );
-#if HANDLE_EXCEPTION
-  try
-#endif
-  {
-    ret = tryDecodePicture( &cPicture, -1, filename, ffwdDecoder, nullptr, msg, false, cPicture.poc, false );
-    if( ret )  
-    { 
-      msg.log( VVENC_ERROR, "decoding failed\n");
-      return VVENC_ERR_UNSPECIFIED; 
-    }
-  }
-#if HANDLE_EXCEPTION
-  catch( std::exception& e )
-  {
-    msg.log( VVENC_ERROR, "decoding failed: %s\n", e.what() );
-    return VVENC_ERR_UNSPECIFIED;
-  }
-#endif
-
-#if ENABLE_TRACING
-  tracing_uninit( g_trace_ctx );
-#endif
-  return ret;
+  msg.log( VVENC_ERROR, "vvenc_decode_bitstream is deprecated and not working anymore." );
+  return VVENC_ERR_NOT_SUPPORTED;
 }
 
 

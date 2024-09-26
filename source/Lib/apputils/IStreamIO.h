@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -48,6 +48,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <cstdint>
+#include <limits>
 
 #include "VVEncAppCfg.h"
 #include <vvenc/vvencCfg.h>
@@ -460,6 +462,14 @@ class IStreamToArr
     IStreamToArr( T* v, size_t maxSize )
     : _valVec        ( v )
     , _maxSize       ( maxSize )
+    , _curSize       ( nullptr )
+    {
+    }
+
+    IStreamToArr( T* v, size_t maxSize, int* curSize )
+    : _valVec        ( v )
+    , _maxSize       ( maxSize )
+    , _curSize       ( curSize )
     {
     }
 
@@ -476,6 +486,7 @@ class IStreamToArr
   private:
     T*     _valVec;
     size_t _maxSize;
+    int*   _curSize;
 };
 
 template<typename T>
@@ -485,6 +496,7 @@ inline std::istream& operator >> ( std::istream& in, IStreamToArr<T>& toArr )
 
   bool fail = false;
   size_t pos = 0;
+  if ( toArr._curSize ) *toArr._curSize = 0;
   // split into multiple lines if any
   while ( ! in.eof() )
   {
@@ -525,6 +537,8 @@ inline std::istream& operator >> ( std::istream& in, IStreamToArr<T>& toArr )
   {
     in.setstate( std::ios::failbit );
   }
+
+  if ( toArr._curSize ) *toArr._curSize = static_cast<int>( std::min<size_t>( pos, toArr._maxSize ) );
 
   return in;
 }
@@ -684,7 +698,10 @@ inline std::istream& operator >> ( std::istream& in, IStreamToAbbr<T,A>& toValue
 
       double value = strtod(str.c_str(), NULL); // convert input string to double
       value *= map.value;                       // scale depending on given abbreviation/scaling factor
-      *toValue.dstVal = (T)value;
+      double roundDir    = value < 0 ? -1 : ( value > 0 ? 1 : 0 );
+      double roundOffset = std::is_floating_point<T>::value ? 0.0 : 0.5;
+      value += roundDir * roundOffset;
+      *toValue.dstVal = ( T ) value;
       return in;
     }
   }

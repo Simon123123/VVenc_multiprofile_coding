@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -53,6 +53,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <atomic>
 
 namespace vvenc {
+
+using namespace x86_simd;
 
 class NoMallocThreadPool;
 
@@ -112,7 +114,6 @@ struct TemporalFilterSourcePicInfo
   Array2D<MotionVector> mvs;
   int                   index;
 };
-
 // ====================================================================================================================
 // Class definition
 // ====================================================================================================================
@@ -125,11 +126,11 @@ public:
   MCTF();
   virtual ~MCTF();
 
-  void init( const VVEncCfg& encCfg, NoMallocThreadPool* threadPool );
+  void init( const VVEncCfg& encCfg, bool isFinalPass, NoMallocThreadPool* threadPool );
 
 protected:
   virtual void initPicture    ( Picture* pic );
-  virtual void processPictures( const PicList& picList, bool flush, AccessUnitList& auList, PicList& doneList, PicList& freeList );
+  virtual void processPictures( const PicList& picList, AccessUnitList& auList, PicList& doneList, PicList& freeList );
 private:
   void filter( const std::deque<Picture*>& picFifo, int filterIdx );
 
@@ -147,23 +148,25 @@ private:
 
   void( *m_applyFrac[MAX_NUM_CH][2] )( const Pel* org, const ptrdiff_t origStride, Pel* dst, const ptrdiff_t dstStride, const int bsx, const int bsy, const int16_t* xFilter, const int16_t* yFilter, const int bitDepth );
 
+  void( *m_applyPlanarCorrection )( const Pel* refPel, const ptrdiff_t refStride, Pel* dstPel, const ptrdiff_t dstStride, const int32_t w, const int32_t h, const ClpRng& clpRng, const uint16_t motionError );
   void( *m_applyBlock )( const CPelBuf& src, PelBuf& dst, const CompArea& blk, const ClpRng& clpRng, const Pel** correctedPics, int numRefs, const int* verror, const double* refStrenghts, double weightScaling, double sigmaSq );
+  double( *m_calcVar ) ( const Pel* org, const ptrdiff_t origStride, const int w, const int h );
 
 private:
   static const double   m_chromaFactor;
   static const double   m_sigmaMultiplier;
-  static const double   m_sigmaZeroPoint;
   static const int      m_range;
   static const int      m_motionVectorFactor;
   static const int      m_padding;
   static const int16_t  m_interpolationFilter4[16][4];
   static const int16_t  m_interpolationFilter8[16][8];
-  static const double   m_refStrengths[3][4];
+  static const double   m_refStrengths[2][6];
   static const int      m_cuTreeThresh[4];
   static const double   m_cuTreeCenter;
 
   const VVEncCfg*       m_encCfg;
   NoMallocThreadPool*   m_threadPool;
+  bool                  m_isFinalPass;
   int                   m_filterPoc;
   Area                  m_area;
   int                   m_MCTFSpeedVal;
@@ -178,7 +181,7 @@ private:
   int motionErrorLuma   (const PelStorage &orig, const PelStorage &buffer, const int x, const int y, int dx, int dy, const int bs, const int besterror) const;
 
   bool estimateLumaLn   ( std::atomic_int& blockX, std::atomic_int* prevLineX, Array2D<MotionVector> &mvs, const PelStorage &orig, const PelStorage &buffer, const int blockSize,
-    const Array2D<MotionVector> *previous, const int factor, const bool doubleRes, int blockY ) const;
+    const Array2D<MotionVector> *previous, const int factor, const bool doubleRes, int blockY, int bitDepth ) const;
 
   void motionEstimationLuma(Array2D<MotionVector> &mvs, const PelStorage &orig, const PelStorage &buffer, const int bs,
     const Array2D<MotionVector> *previous=0, const int factor = 1, const bool doubleRes = false) const;
@@ -186,6 +189,8 @@ private:
   void bilateralFilter  (const PelStorage &orgPic, std::deque<TemporalFilterSourcePicInfo> &srcFrameInfo, PelStorage &newOrgPic, double overallStrength) const;
 
   void xFinalizeBlkLine (const PelStorage &orgPic, std::deque<TemporalFilterSourcePicInfo> &srcFrameInfo, PelStorage &newOrgPic, int yStart, const double sigmaSqCh[MAX_NUM_CH], double overallStrenght) const;
+
+  void motionEstimationMCTF(Picture* curPic, std::deque<TemporalFilterSourcePicInfo>& srcFrameInfo, const PelStorage& origBuf, PelStorage& origSubsampled2, PelStorage& origSubsampled4, PelStorage& origSubsampled8, std::vector<double>& mvErr, double& minError, bool addLevel, bool calcErr);
 
 }; // END CLASS DEFINITION MCTF
 

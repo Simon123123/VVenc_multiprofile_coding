@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -81,27 +81,6 @@ class EncHRD;
 class MsgLog;
 class GOPCfg;
 
-struct FFwdDecoder
-{
-  bool bDecode1stPart;
-  bool bHitFastForwardPOC;
-  bool loopFiltered;
-  int  iPOCLastDisplay;
-  std::ifstream* bitstreamFile;
-  InputByteStream* bytestream;
-  DecLib *pcDecLib;
-
-  FFwdDecoder()
-    : bDecode1stPart      ( true )
-      , bHitFastForwardPOC( false )
-      , loopFiltered      ( false )
-      , iPOCLastDisplay   ( -MAX_INT )
-      , bitstreamFile     ( nullptr )
-      , bytestream        ( nullptr )
-      , pcDecLib          ( nullptr )
-  {}
-};
-
 // ====================================================================================================================
 
 class EncGOP;
@@ -114,6 +93,22 @@ struct FinishTaskParam {
 };
 
 // ====================================================================================================================
+struct RateCapParam {
+  unsigned accumActualBits = 0;
+  unsigned accumTargetBits = 0;
+  unsigned accumGopCounter = 0;
+  double   nonRateCapEstim = 0.0;
+  int      gopAdaptedQPAdj = 0;
+  uint16_t prevKeyPicSpVisAct[MAX_NUM_CH] = { 0, 0 };
+  bool     prevKeyPicStored = false;
+
+  void reset() 
+  {
+    accumActualBits = 0;
+    accumTargetBits = 0;
+    accumGopCounter = 0;
+  }
+};
 
 class EncGOP : public EncStage
 {
@@ -142,9 +137,7 @@ private:
   SEIEncoder                m_seiEncoder;
   EncReshape                m_Reshaper;
   BlkStat                   m_BlkStat;
-  FFwdDecoder               m_ffwdDecoder;
 
-  ParameterSetMap<APS>      m_gopApsMap;
   ParameterSetMap<SPS>      m_spsMap;
   ParameterSetMap<PPS>      m_ppsMap;
   EncHRD                    m_EncHRD;
@@ -162,19 +155,19 @@ private:
   int                       m_lastIDR;
   int                       m_lastRasPoc;
   int                       m_pocCRA;
-  int                       m_appliedSwitchDQP;
   int                       m_associatedIRAPPOC;
   vvencNalUnitType          m_associatedIRAPType;
+  RateCapParam              m_rcap;
 
   std::list<EncPicture*>    m_freePicEncoderList;
   std::list<Picture*>       m_gopEncListInput;
   std::list<Picture*>       m_gopEncListOutput;
   std::list<Picture*>       m_procList;
   std::list<Picture*>       m_rcUpdateList;
-
+  std::list<Picture*>       m_rcInputReorderList;  // used in RC in IFP lines synchro mode
+  std::deque<PicApsGlobal*> m_globalApsList;
   std::vector<int>          m_globalCtuQpVector;
-
-  bool                      m_trySkipOrDecodePicture;
+  bool                      m_forceSCC;
 
 public:
   EncGOP( MsgLog& msglog );
@@ -190,15 +183,15 @@ public:
 
 protected:
   virtual void initPicture    ( Picture* pic );
-  virtual void processPictures( const PicList& picList, bool flush, AccessUnitList& auList, PicList& doneList, PicList& freeList );
+  virtual void processPictures( const PicList& picList, AccessUnitList& auList, PicList& doneList, PicList& freeList );
   virtual void waitForFreeEncoders();
 
 private:
   void xUpdateRasInit                 ( Slice* slice );
-  void xProcessPictures               ( bool flush, AccessUnitList& auList, PicList& doneList );
+  void xProcessPictures               ( AccessUnitList& auList, PicList& doneList );
   void xEncodePicture                 ( Picture* pic, EncPicture* picEncoder );
   void xOutputRecYuv                  ( const PicList& picList );
-  void xReleasePictures               ( const PicList& picList, PicList& freeList, bool allDone );
+  void xReleasePictures               ( const PicList& picList, PicList& freeList );
 
   void xInitVPS                       ( VPS &vps ) const;
   void xInitDCI                       ( DCI &dci, const SPS &sps, const int dciId ) const;
@@ -209,19 +202,22 @@ private:
   void xInitRPL                       ( SPS &sps ) const;
   void xInitHrdParameters             ( SPS &sps );
 
-  vvencNalUnitType xGetNalUnitType    ( const Slice* slice ) const;
+  vvencNalUnitType xGetNalUnitType    ( const GOPEntry* _gopEntry ) const;
   bool xIsSliceTemporalSwitchingPoint ( const Slice* slice, const PicList& picList ) const;
 
-  void xInitPicsInCodingOrder         ( const PicList& picList, bool flush );
+  void xSetupPicAps                   ( Picture* pic );
+  void xInitPicsInCodingOrder         ( const PicList& picList );
   void xGetProcessingLists            ( std::list<Picture*>& procList, std::list<Picture*>& rcUpdateList, const bool lockStepMode );
+  void xInitGopQpCascade              ( Picture& keyPic, PicList::const_iterator picItr, const PicList& picList );
   void xInitFirstSlice                ( Picture& pic, const PicList& picList, bool isEncodeLtRef );
   void xInitSliceTMVPFlag             ( PicHeader* picHeader, const Slice* slice );
   void xUpdateRPRtmvp                 ( PicHeader* picHeader, Slice* slice );
   void xInitSliceMvdL1Zero            ( PicHeader* picHeader, const Slice* slice );
   void xInitLMCS                      ( Picture& pic );
   void xSelectReferencePictureList    ( Slice* slice ) const;
-  void xSyncAlfAps                    ( Picture& pic, ParameterSetMap<APS>& dst, const ParameterSetMap<APS>& src );
+  void xSyncAlfAps                    ( Picture& pic );
 
+  void xUpdateRcIfp                   ();
   void xWritePicture                  ( Picture& pic, AccessUnitList& au, bool isEncodeLtRef );
   int  xWriteParameterSets            ( Picture& pic, AccessUnitList& accessUnit, HLSWriter& hlsWriter );
   int  xWritePictureSlices            ( Picture& pic, AccessUnitList& accessUnit, HLSWriter& hlsWriter );
@@ -238,10 +234,19 @@ private:
   void xAttachSliceDataToNalUnit      ( OutputNALUnit& rNalu, const OutputBitstream* pcBitstreamRedirect );
   void xCabacZeroWordPadding          ( const Picture& pic, const Slice* slice, uint32_t binCountsInNalUnits, uint32_t numBytesInVclNalUnits, std::ostringstream &nalUnitData );
 
-  void xAddPSNRStats              ( const Picture* pic, CPelUnitBuf cPicD, AccessUnitList&, bool printFrameMSE, double* PSNR_Y, bool isEncodeLtRef );
+  void xUpdateRateCap();
+  void xUpdateRateCapBits             ( const Picture* pic, const uint32_t uibits );
+  void xAddPSNRStats( const Picture* pic, CPelUnitBuf cPicD, AccessUnitList&, bool printFrameMSE, double* PSNR_Y, bool isEncodeLtRef );
   uint64_t xFindDistortionPlane       ( const CPelBuf& pic0, const CPelBuf& pic1, uint32_t rshift ) const;
   void xPrintPictureInfo              ( const Picture& pic, AccessUnitList& accessUnit, const std::string& digestStr, bool printFrameMSE, bool isEncodeLtRef );
   inline bool xEncodersFinished       () { return ( int ) m_freePicEncoderList.size() >= std::max(1, m_pcEncCfg->m_maxParallelFrames); }
+  inline bool xLockStepPicsFinished   ()
+  {
+    std::lock_guard<std::mutex> lock( m_gopEncMutex );
+    return ( int ) m_freePicEncoderList.size() >= std::max(1, m_pcEncCfg->m_maxParallelFrames); 
+  }
+  void xForceScc                      ( Picture& pic );
+
 };// END CLASS DEFINITION EncGOP
 
 } // namespace vvenc

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -87,8 +87,7 @@ public:
 
   Picture*         picture;
   CodingStructure* parent;
-  CodingStructure* refCS;
-  CodingStructure* bestCS;
+  CodingStructure* lumaCS;
   Slice*           slice;
 
   UnitScale        unitScale[MAX_NUM_COMP];
@@ -111,8 +110,8 @@ public:
 #endif
 
   CodingStructure( XUCache& unitCache, std::mutex* mutex );
-  void create( const UnitArea& _unit, const bool isTopLayer, const PreCalcValues* _pcv );
-  void create( const ChromaFormat _chromaFormat, const Area& _area, const bool isTopLayer );
+  void createPicLevel( const UnitArea& _unit, const PreCalcValues* _pcv );
+  void createForSearch( const ChromaFormat _chromaFormat, const Area& _area );
   void destroy();
   void releaseIntermediateData();
 
@@ -163,7 +162,7 @@ public:
   Distortion  dist;
   Distortion  interHad;
 
-  void initStructData  ( const int QP = MAX_INT, const bool skipMotBuf = false, const UnitArea* area = nullptr, bool force = false );
+  void initStructData  ( const int QP = MAX_INT, const bool skipMotBuf = true, const UnitArea* area = nullptr );
   void initSubStructure(      CodingStructure& cs, const ChannelType chType, const UnitArea& subArea, const bool isTuEnc, PelStorage* pOrgBuffer = nullptr, PelStorage* pRspBuffer = nullptr);
   void compactResize   ( const UnitArea& area );
 
@@ -172,7 +171,6 @@ public:
 
   void clearTUs( bool force = false );
   void clearCUs( bool force = false );
-  const int signalModeCons( const PartSplit split, Partitioner &partitioner, const ModeType modeTypeParent ) const;
 
   void createTempBuffers( const bool isTopLayer );
   void destroyTempBuffers();

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -54,6 +54,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 namespace vvenc {
 
+using namespace x86_simd;
 
 #define DEBLOCK_SMALLEST_BLOCK  8
 
@@ -88,20 +89,14 @@ public:
   ~LoopFilter();
 
   /// picture-level deblocking filter
-  void loopFilterPic                  ( CodingStructure& cs, bool calcFilterStrength ) const;
-  void loopFilterPicLine              ( CodingStructure& cs, const ChannelType chType,                   const int ctuLine, const int offset = 0, DeblockEdgeDir edgeDir = NUM_EDGE_DIR ) const;
   static void calcFilterStrengthsCTU  ( CodingStructure& cs, const UnitArea& ctuArea, const bool clearLFP );
-
   static void calcFilterStrengths     ( const CodingUnit& cu, bool clearLF = false );
-
   static void getMaxFilterLength      ( const CodingUnit& cu, int& maxFilterLenghtLumaHor, int& maxFilterLenghtLumaVer );
 
   /// ctu-level deblocking filter
   template<DeblockEdgeDir edgeDir>
   void xDeblockArea                   ( const CodingStructure& cs, const UnitArea& area, const ChannelType chType, PelUnitBuf& picReco ) const;
-
   void loopFilterCu                   ( const CodingUnit& cu, ChannelType chType, DeblockEdgeDir edgeDir, PelUnitBuf& dbBuffer );
-
   void setOrigin( const ChannelType chType, const Position& pos ) { m_origin[chType] = pos; }
 
 private:

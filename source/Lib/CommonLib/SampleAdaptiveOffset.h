@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -53,6 +53,8 @@ POSSIBILITY OF SUCH DAMAGE.
 
 namespace vvenc {
 
+using namespace x86_simd;
+
 template<typename T> static inline int sgn( T val )
 {
   return ( T( 0 ) < val ) - ( val < T( 0 ) );
@@ -86,7 +88,6 @@ public:
 
   SampleAdaptiveOffset();
   virtual ~SampleAdaptiveOffset();
-  void        SAOProcess      ( CodingStructure& cs, SAOBlkParam* saoBlkParams );
   void        init            ( ChromaFormat format, uint32_t maxCUWidth, uint32_t maxCUHeight, uint32_t lumaBitShift, uint32_t chromaBitShift );
   static int  getMaxOffsetQVal( const int channelBitDepth) { return (1<<(std::min<int>(channelBitDepth,MAX_SAO_TRUNCATED_BITDEPTH)-5))-1; } //Table 9-32, inclusive
 

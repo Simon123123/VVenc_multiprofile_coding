@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -91,15 +91,15 @@ void IntraSearch::init(const VVEncCfg &encCfg, TrQuant *pTrQuant, RdCost *pRdCos
   m_pTempCS = new CodingStructure( unitCache, nullptr );
   m_pBestCS = new CodingStructure( unitCache, nullptr );
 
-  m_pTempCS->create( chrFormat, area, false );
-  m_pBestCS->create( chrFormat, area, false );
+  m_pTempCS->createForSearch( chrFormat, area );
+  m_pBestCS->createForSearch( chrFormat, area );
 
   const int uiNumSaveLayersToAllocate = 3;
   m_pSaveCS = new CodingStructure*[uiNumSaveLayersToAllocate];
   for( int layer = 0; layer < uiNumSaveLayersToAllocate; layer++ )
   {
     m_pSaveCS[ layer ] = new CodingStructure( unitCache, nullptr );
-    m_pSaveCS[ layer ]->create( chrFormat, Area( 0, 0, maxCUSize, maxCUSize ), false );
+    m_pSaveCS[ layer ]->createForSearch( chrFormat, Area( 0, 0, maxCUSize, maxCUSize ) );
     m_pSaveCS[ layer ]->initStructData();
   }
 
@@ -528,7 +528,7 @@ bool IntraSearch::estIntraPredLumaQT(CodingUnit &cu, Partitioner &partitioner, d
   csBest->initStructData();
 
   int   bestLfnstIdx  = 0;
-  const bool useBDPCM = cs.picture->useScBDPCM;
+  const bool useBDPCM = cs.picture->useBDPCM;
   int   NumBDPCMCand  = (useBDPCM && sps.BDPCM && CU::bdpcmAllowed(cu, ComponentID(partitioner.chType))) ? 2 : 0;
   int   bestbdpcmMode = 0;
   int   bestISP       = 0;
@@ -729,7 +729,7 @@ void IntraSearch::estIntraPredChromaQT( CodingUnit& cu, Partitioner& partitioner
   PartSplit ispType     = lumaUsesISP ? CU::getISPType(cu, COMP_Y) : TU_NO_ISP;
   double bestCostSoFar  = maxCostAllowed;
   const uint32_t numberValidComponents = getNumberValidComponents( cu.chromaFormat );
-  const bool useBDPCM   = cs.picture->useScBDPCM;
+  const bool useBDPCM   = cs.picture->useBDPCM;
 
   uint32_t   uiBestMode = 0;
   Distortion uiBestDist = 0;
@@ -1514,7 +1514,7 @@ void IntraSearch::xIntraCodingLumaQT(CodingStructure& cs, Partitioner& partition
   double dSingleCost        = MAX_DOUBLE;
   int endLfnstIdx           = (partitioner.isSepTree(cs) && partitioner.chType == CH_C && (currArea.lwidth() < 8 || currArea.lheight() < 8))
                            || (currArea.lwidth() > sps.getMaxTbSize() || currArea.lheight() > sps.getMaxTbSize()) || !sps.LFNST || (numMode < 0) ? 0 : 2;
-  const bool useTS          = cs.picture->useScTS;
+  const bool useTS          = cs.picture->useTS;
   numMode                   = (numMode < 0) ? -numMode : numMode;
 
   if (cu.mipFlag && !allowLfnstWithMip(cu.lumaSize()))
@@ -1994,7 +1994,7 @@ ChromaCbfs IntraSearch::xIntraChromaCodingQT(CodingStructure& cs, Partitioner& p
   const CodingUnit& cu  = *cs.getCU( currArea.chromaPos(), CH_C, TREE_D );
   ChromaCbfs cbfs(false);
   uint32_t   currDepth = partitioner.currTrDepth;
-  const bool useTS = cs.picture->useScTS;
+  const bool useTS = cs.picture->useTS;
   if (currDepth == currTU.depth)
   {
     if (!currArea.Cb().valid() || !currArea.Cr().valid())

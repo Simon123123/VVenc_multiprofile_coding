@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -83,7 +83,7 @@ void EncPicture::init( const VVEncCfg& encCfg,
 
 void EncPicture::compressPicture( Picture& pic, EncGOP& gopEncoder )
 {
-  PROFILER_SCOPE_AND_STAGE_EXT( 1, g_timeProfiler, P_TOP_LEVEL, pic.cs, CH_L );
+  PROFILER_SCOPE_TOP_LEVEL_EXT( 1, g_timeProfiler, P_TOP_LEVEL, pic.cs );
   ITT_TASKSTART( itt_domain_picEncoder, itt_handle_start );
 
   pic.encTime.startTimer();
@@ -91,9 +91,9 @@ void EncPicture::compressPicture( Picture& pic, EncGOP& gopEncoder )
   pic.createTempBuffers( pic.cs->pcv->maxCUSize );
   pic.cs->createCoeffs();
   pic.cs->createTempBuffers( true );
-  pic.cs->initStructData( MAX_INT, false, nullptr, true );
+  pic.cs->initStructData( MAX_INT, false, nullptr );
 
-  if( pic.useScLMCS && m_pcEncCfg->m_reshapeSignalType == RESHAPE_SIGNAL_PQ && m_pcEncCfg->m_alf )
+  if( pic.useLMCS && m_pcEncCfg->m_reshapeSignalType == RESHAPE_SIGNAL_PQ && m_pcEncCfg->m_alf )
   {
     const double *weights = gopEncoder.getReshaper().getlumaLevelToWeightPLUT();
     auto& vec = m_ALF.getLumaLevelWeightTable();
@@ -114,6 +114,7 @@ void EncPicture::compressPicture( Picture& pic, EncGOP& gopEncoder )
 
   // compress current slice
   pic.cs->slice = pic.slices[0];
+  std::fill( pic.ctuSlice.begin(), pic.ctuSlice.end(), pic.slices[0] );
   m_SliceEncoder.compressSlice( &pic );
 
   ITT_TASKEND( itt_domain_picEncoder, itt_handle_start );
@@ -121,11 +122,11 @@ void EncPicture::compressPicture( Picture& pic, EncGOP& gopEncoder )
 
 void EncPicture::finalizePicture( Picture& pic )
 {
-  PROFILER_SCOPE_AND_STAGE_EXT( 1, g_timeProfiler, P_TOP_LEVEL, pic.cs, CH_L );
+  PROFILER_SCOPE_TOP_LEVEL_EXT( 1, g_timeProfiler, P_TOP_LEVEL, pic.cs );
   CodingStructure& cs = *(pic.cs);
   Slice* slice        = pic.slices[0];
   // ALF
-  if( slice->sps->alfEnabled && pic.encPic )
+  if( slice->sps->alfEnabled )
   {
 #ifdef TRACE_ENABLE_ITT
     std::stringstream ss;
@@ -145,27 +146,41 @@ void EncPicture::finalizePicture( Picture& pic )
     DTRACE_PIC_COMP( D_REC_CB_CHROMA_ALF, cs, cs.getRecoBuf(), COMP_Cr );
   }
 
-  if( pic.writePic )
-  {
-    // write picture
-    DTRACE_UPDATE( g_trace_ctx, std::make_pair( "bsfinal", 1 ) );
-    xWriteSliceData( pic );
-    DTRACE_UPDATE( g_trace_ctx, std::make_pair( "bsfinal", 0 ) );
-  }
+  // write picture
+  DTRACE_UPDATE( g_trace_ctx, std::make_pair( "bsfinal", 1 ) );
+  xWriteSliceData( pic );
+  DTRACE_UPDATE( g_trace_ctx, std::make_pair( "bsfinal", 0 ) );
 
   xCalcDistortion( pic, *slice->sps );
-  
+
   // finalize
-  pic.extendPicBorder();
   if ( m_pcEncCfg->m_useAMaxBT )
   {
     pic.picBlkStat.storeBlkSize( pic );
   }
-  // cleanup
-  if( pic.encPic )
+
+  // copy ALF APSs to global list
+  CHECK( m_pcEncCfg->m_alf && m_pcEncCfg->m_alfTempPred && !pic.picApsGlobal, "Missing APS from top level" );
+  if( pic.picApsGlobal )
   {
-    pic.cs->releaseIntermediateData();
+    CHECK( pic.picApsGlobal->poc != pic.poc, "Global APS POC must be consistent with picture poc" );
+    const ParameterSetMap<APS>& src = pic.picApsMap;
+    ParameterSetMap<APS>&       dst = pic.picApsGlobal->apsMap;
+    for( int i = 0; i < ALF_CTB_MAX_NUM_APS; i++ )
+    {
+      const int apsMapIdx = ( i << NUM_APS_TYPE_LEN ) + ALF_APS;
+      const APS* srcAPS = src.getPS( apsMapIdx );
+      if( srcAPS )
+      {
+        APS* dstAPS = dst.allocatePS( apsMapIdx );
+        *dstAPS = *srcAPS;
+      }
+    }
+    dst.setApsIdStart( src.getApsIdStart() );
   }
+
+  // cleanup
+  pic.cs->releaseIntermediateData();
   pic.cs->destroyTempBuffers();
   pic.cs->destroyCoeffs();
   pic.destroyTempBuffers();
@@ -242,7 +257,7 @@ void EncPicture::xCalcDistortion( Picture& pic, const SPS& sps )
     const uint32_t maxval = 255 << (bitDepth - 8);
     const uint32_t size   = width * height;
     const double fRefValue = (double)maxval * maxval * size;
-    pic.psnr[comp] = uiSSDtemp ? 10.0 * log10(fRefValue / (double)uiSSDtemp) : 999.99;
+    pic.psnr[comp] = uiSSDtemp ? 10.0 * log10(fRefValue / (double)uiSSDtemp) : MAX_DOUBLE;
     pic.mse [comp] = (double)uiSSDtemp / size;
   }
 }
@@ -252,14 +267,6 @@ void EncPicture::xInitPicEncoder( Picture& pic )
   Slice* slice = pic.cs->slice;
 
   CHECK( slice != pic.slices[0], "Slice pointers don't match!" );
-
-  if( m_pcEncCfg->m_RCTargetBitrate > 0 )
-  {
-    pic.picInitialQP     = -1;
-    pic.picInitialLambda = -1.0;
-
-    m_pcRateCtrl->initRateControlPic( pic, slice, pic.picInitialQP, pic.picInitialLambda );
-  }
 
   m_SliceEncoder.initPic( &pic );
 
@@ -321,146 +328,6 @@ void EncPicture::xInitSliceCheckLDC( Slice* slice ) const
   else
   {
     slice->checkLDC = true;
-  }
-}
-
-
-void EncPicture::skipCompressPicture( Picture& pic, ParameterSetMap<APS>& shrdApsMap )
-{
-  CodingStructure& cs = *(pic.cs);
-  Slice* slice        = pic.slices[ 0 ];
-
-  if( slice->sps->saoEnabled )
-  {
-    m_SliceEncoder.saoDisabledRate( cs, pic.getSAO( 1 ) );
-  }
-
-  if ( slice->sps->alfEnabled && ( slice->alfEnabled[COMP_Y] || slice->ccAlfCbEnabled || slice->ccAlfCrEnabled ) )
-  {
-    // IRAP AU: reset APS map
-    int layerIdx = slice->vps == nullptr ? 0 : slice->vps->generalLayerIdx[ pic.layerId ];
-    if( !layerIdx && ( slice->pendingRasInit || slice->isIDRorBLA() ) )
-    {
-      // We have to reset all APS on IRAP, but in not encoding case we have to keep the parsed APS of current slice
-      // Get active ALF APSs from picture/slice header
-      const std::vector<int> sliceApsIdsLuma = slice->lumaApsId;
-
-      m_ALF.setApsIdStart( ALF_CTB_MAX_NUM_APS );
-
-      ParameterSetMap<APS>* apsMap = &pic.picApsMap;
-      apsMap->clearActive();
-
-      for( int apsId = 0; apsId < ALF_CTB_MAX_NUM_APS; apsId++ )
-      {
-        int psId = ( apsId << NUM_APS_TYPE_LEN ) + ALF_APS;
-        APS* aps = apsMap->getPS( psId );
-        if( aps )
-        {
-          // Check if this APS is currently the active one (used in current slice)
-          bool activeAps = false;
-          bool activeApsCcAlf = false;
-
-          // Luma
-          for( int i = 0; i < sliceApsIdsLuma.size(); i++ )
-          {
-            if( aps->apsId == sliceApsIdsLuma[i] )
-            {
-              activeAps = true;
-              break;
-            }
-          }
-          // Chroma
-          activeAps |= ( slice->alfEnabled[COMP_Cb] || slice->alfEnabled[COMP_Cr] ) && aps->apsId == slice->chromaApsId;
-          // CC-ALF
-          activeApsCcAlf |= slice->ccAlfCbEnabled && aps->apsId == slice->ccAlfCbApsId;
-          activeApsCcAlf |= slice->ccAlfCrEnabled && aps->apsId == slice->ccAlfCrApsId;
-
-          if( !activeAps && !activeApsCcAlf )
-          {
-            apsMap->clearChangedFlag( psId );
-          }
-          if( !activeAps  )
-          {
-            aps->alfParam.reset();
-          }
-          if( !activeApsCcAlf )
-          {
-            aps->ccAlfParam.reset();
-          }
-        }
-      }
-    }
-
-    // Assign the correct APS to slice and emulate the setting of ALF start APS ID
-    int changedApsId = -1;
-    for( int apsId = ALF_CTB_MAX_NUM_APS - 1; apsId >= 0; apsId-- )
-    {
-      ParameterSetMap<APS>* apsMap = &pic.picApsMap;
-      int psId = ( apsId << NUM_APS_TYPE_LEN ) + ALF_APS;
-      APS* aps = apsMap->getPS( psId );
-      if( aps )
-      {
-        DTRACE( g_trace_ctx, D_ALF, "%d: id=%d, apsId=%d, t=%d, ch=%d, lid=%d, tid=%d, nf=%d,%d\n", slice->poc, psId, aps->apsId, aps->apsType, apsMap->getChangedFlag( psId ), aps->layerId, aps->temporalId, aps->alfParam.newFilterFlag[CH_L], aps->alfParam.newFilterFlag[CH_C] );
-        // In slice, replace the old APS (from decoder map) with the APS from encoder map due to later checks while bitstream writing
-        if( slice->alfAps[apsId] )
-        {
-          slice->alfAps[apsId] = aps;
-        }
-
-        if( apsMap->getChangedFlag( psId ) )
-        {
-          changedApsId = apsId;
-        }
-      }
-    }
-
-    if( changedApsId >= 0 )
-    {
-      m_ALF.setApsIdStart( changedApsId );
-    }
-
-    DTRACE( g_trace_ctx, D_ALF, "m_apsIdStart=%d\n", m_ALF.getApsIdStart() );
-  }
-
-  // LMCS APS
-  // Here the decoded LMCS-APS is contained in the global shared APS map
-  // We have to sync the picture LMCS-APS with the global shared LMCS-APS
-  // NOTE: the "ChangedFlag" is also synced, enabling the APS writing later
-  if( slice->sps->lumaReshapeEnable )
-  {
-    ParameterSetMap<APS>& apsMap = shrdApsMap;
-    const int lmcsApsId          = slice->picHeader->lmcsApsId;
-    const int apsMapIdx          = ( lmcsApsId << NUM_APS_TYPE_LEN ) + LMCS_APS;
-    APS* aps                     = apsMap.getPS( apsMapIdx );
-    if( aps )
-    {
-      // LMCS parameters are not completely coming from APS, some data have to come from picture/slice header
-      // Better structuring of parameters is suggested
-      if( slice->picHeader->lmcsEnabled )
-      {
-        aps->lmcsParam.sliceReshaperModelPresent = true;
-        aps->lmcsParam.sliceReshaperEnabled      = slice->picHeader->lmcsEnabled;
-        aps->lmcsParam.enableChromaAdj           = slice->picHeader->lmcsChromaResidualScale;
-      }
-      else
-      {
-        aps->lmcsParam.sliceReshaperModelPresent = false;
-        aps->lmcsParam.sliceReshaperEnabled      = false;
-      }
-
-      ParameterSetMap<APS>& picApsMap = pic.picApsMap;
-      APS* picAps                     = picApsMap.getPS( apsMapIdx );
-      if ( picAps == nullptr )
-      {
-        picAps = picApsMap.allocatePS( apsMapIdx );
-        picAps->apsType     = LMCS_APS;
-        picAps->apsId       = lmcsApsId;
-      }
-      picAps->lmcsParam = aps->lmcsParam;
-      picApsMap.setChangedFlag( apsMapIdx, apsMap.getChangedFlag( apsMapIdx ) );
-      apsMap.clearChangedFlag( apsMapIdx ); // clear flag in the global map, preventing the reusing of it
-      slice->picHeader->lmcsAps = picAps; // just to be sure
-    }
   }
 }
 

@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -83,9 +83,12 @@ struct VVEncCfg : public vvenc_config
   VVEncCfg& operator= ( const vvenc_config& extern_cfg );
 
   bool m_stageParallelProc;
+  bool m_salienceBasedOpt;
+  bool m_rateCap;
   int  m_log2GopSize;
   int  m_maxTLayer;
   int  m_bimCtuSize;
+  unsigned m_MaxQT[3];
 
 #if !VVENC_STAT && VVENC_MULTI_RATE
   shape_map m_sh_map;

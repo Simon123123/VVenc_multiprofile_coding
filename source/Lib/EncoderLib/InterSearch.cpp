@@ -6,7 +6,7 @@ the Software are granted under this license.
 
 The Clear BSD License
 
-Copyright (c) 2019-2022, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
+Copyright (c) 2019-2024, Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. & The VVenC Authors.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -217,7 +217,7 @@ InterSearch::~InterSearch()
 
 void InterSearch::init( const VVEncCfg& encCfg, TrQuant* pTrQuant, RdCost* pRdCost, EncModeCtrl* pModeCtrl, CodingStructure **pSaveCS )
 {
-  InterPrediction::init( pRdCost, encCfg.m_internChromaFormat, encCfg.m_CTUSize );
+  InterPrediction::init( pRdCost, encCfg.m_internChromaFormat, encCfg.m_CTUSize, encCfg.m_ifpLines );
   m_numBVs                       = 0;
   m_pcEncCfg                     = &encCfg;
   m_pcTrQuant                    = pTrQuant;
@@ -261,10 +261,10 @@ void InterSearch::init( const VVEncCfg& encCfg, TrQuant* pTrQuant, RdCost* pRdCo
   }
   m_tmpStorageLCU.create( UnitArea( cform, Area( 0, 0, MAX_CU_SIZE, MAX_CU_SIZE ) ) );
   m_pTempPel = new Pel[ encCfg.m_CTUSize * encCfg.m_CTUSize ];
-  m_tmpAffiStorage.create(UnitArea(cform, Area(0, 0, MAX_CU_SIZE, MAX_CU_SIZE)));
+  m_tmpAffiStorage.create(UnitArea(cform, Area(0, 0, MAX_CU_SIZE, MAX_CU_SIZE + 2)));  // allow overread by 2 samples
   m_tmpAffiError = new Pel[MAX_CU_SIZE * MAX_CU_SIZE];
-  m_tmpAffiDeri[0] = new int[MAX_CU_SIZE * MAX_CU_SIZE];
-  m_tmpAffiDeri[1] = new int[MAX_CU_SIZE * MAX_CU_SIZE];
+  m_tmpAffiDeri[0] = new Pel[MAX_CU_SIZE * MAX_CU_SIZE];
+  m_tmpAffiDeri[1] = new Pel[MAX_CU_SIZE * MAX_CU_SIZE];
 
   CompArea chromaArea( COMP_Cb, cform, Area( 0, 0, encCfg.m_CTUSize, encCfg.m_CTUSize ), true );
   for( int i = 0; i < 4; i++ )
@@ -1192,36 +1192,47 @@ bool InterSearch::predInterSearch(CodingUnit& cu, Partitioner& partitioner, doub
 
       if(cs.picHeader->mvdL1Zero)
       {
+        // case: no mvd for L1
+        // note: mv = mvp + mvd
+        // mv for L1 is equal to mvp(L1) and the mvd search is only performed for L0
         xCopyAMVPInfo(&aacAMVPInfo[1][bestBiPRefIdxL1], &amvp[REF_PIC_LIST_1]);
         aaiMvpIdxBi[1][bestBiPRefIdxL1] = bestBiPMvpL1;
         cMvPredBi  [1][bestBiPRefIdxL1] = amvp[REF_PIC_LIST_1].mvCand[bestBiPMvpL1];
-
-        cMvBi    [1] = cMvPredBi[1][bestBiPRefIdxL1];
-        iRefIdxBi[1] = bestBiPRefIdxL1;
-        cu.mv    [REF_PIC_LIST_1][0] = cMvBi[1];
-        cu.refIdx[REF_PIC_LIST_1]    = iRefIdxBi[1];
-        cu.mvpIdx[REF_PIC_LIST_1]    = bestBiPMvpL1;
-
-        PelUnitBuf predBufTmp = m_tmpPredStorage[REF_PIC_LIST_1].getCompactBuf( cu );
-        motionCompensation( cu, predBufTmp, REF_PIC_LIST_1 );
-
-        uiMotBits[0] = uiBits[0] - uiMbBits[0];
-        uiMotBits[1] = uiMbBits[1];
-
-        if ( cs.slice->numRefIdx[ REF_PIC_LIST_1 ] > 1 )
+        if( m_pcEncCfg->m_ifpLines && !CU::isMvInRangeFPP( cu.ly(), cu.lheight(), cMvPredBi[1][bestBiPRefIdxL1].ver, m_pcEncCfg->m_ifpLines, *cu.cs->pcv ) )
         {
-          uiMotBits[1] += bestBiPRefIdxL1 + 1;
-          if ( bestBiPRefIdxL1 == cs.slice->numRefIdx[ REF_PIC_LIST_1 ]-1 )
-          {
-            uiMotBits[1]--;
-          }
+          // this mvp cannot be used for mv, skip Bi-pred
+          uiCostBi = std::numeric_limits<Distortion>::max();
+          doBiPred = false;
         }
 
-        uiMotBits[1] += m_auiMVPIdxCost[aaiMvpIdxBi[1][bestBiPRefIdxL1]][AMVP_MAX_NUM_CANDS];
+        if( doBiPred )
+        {
+          cMvBi[1] = cMvPredBi[1][bestBiPRefIdxL1];
+          iRefIdxBi[1] = bestBiPRefIdxL1;
+          cu.mv[REF_PIC_LIST_1][0] = cMvBi[1];
+          cu.refIdx[REF_PIC_LIST_1] = iRefIdxBi[1];
+          cu.mvpIdx[REF_PIC_LIST_1] = bestBiPMvpL1;
+          PelUnitBuf predBufTmp = m_tmpPredStorage[REF_PIC_LIST_1].getCompactBuf( cu );
+          motionCompensation( cu, predBufTmp, REF_PIC_LIST_1 );
 
-        uiBits[2] = uiMbBits[2] + uiMotBits[0] + uiMotBits[1];
+          uiMotBits[0] = uiBits[0] - uiMbBits[0];
+          uiMotBits[1] = uiMbBits[1];
 
-        cMvTemp[1][bestBiPRefIdxL1] = cMvBi[1];
+          if(cs.slice->numRefIdx[REF_PIC_LIST_1] > 1)
+          {
+            uiMotBits[1] += bestBiPRefIdxL1 + 1;
+            if(bestBiPRefIdxL1 == cs.slice->numRefIdx[REF_PIC_LIST_1] - 1)
+            {
+              uiMotBits[1]--;
+            }
+          }
+
+          uiMotBits[1] += m_auiMVPIdxCost[aaiMvpIdxBi[1][bestBiPRefIdxL1]][AMVP_MAX_NUM_CANDS];
+
+          uiBits[2] = uiMbBits[2] + uiMotBits[0] + uiMotBits[1];
+
+          cMvTemp[1][bestBiPRefIdxL1] = cMvBi[1];
+        }
       }
       else
       {
@@ -1379,6 +1390,11 @@ bool InterSearch::predInterSearch(CodingUnit& cu, Partitioner& partitioner, doub
             cCurMvField.setMvField( aacAMVPInfo[curRefList][refIdxCur].mvCand[i], refIdxCur );
             cTarMvField.setMvField( aacAMVPInfo[tarRefList][refIdxTar].mvCand[j], refIdxTar );
             GCC_WARNING_RESET
+            if( m_pcEncCfg->m_ifpLines )
+            {
+              xCheckAndClipMvToFppLine( cCurMvField.mv, cu.ly(), cu.lheight(), m_pcEncCfg->m_ifpLines, *cu.cs->pcv );
+              xCheckAndClipMvToFppLine( cTarMvField.mv, cu.ly(), cu.lheight(), m_pcEncCfg->m_ifpLines, *cu.cs->pcv );
+            }
             Distortion cost = xGetSymCost( cu, origBuf, eCurRefList, cCurMvField, cTarMvField, BcwIdx );
             if ( cost < costStart )
             {
@@ -1490,7 +1506,11 @@ bool InterSearch::predInterSearch(CodingUnit& cu, Partitioner& partitioner, doub
         cTarMvField.setMvField(cCurMvField.mv.getSymmvdMv(cMvPredSym[curRefList], cMvPredSym[tarRefList]), refIdxTar);
 
         // save results
-        if ( symCost < uiCostBi )
+        if ( symCost < uiCostBi  
+          && ( !m_pcEncCfg->m_ifpLines || 
+          ( CU::isMvInRangeFPP( cu.ly(), cu.lheight(), cCurMvField.mv.ver, m_pcEncCfg->m_ifpLines, *cu.cs->pcv ) &&
+            CU::isMvInRangeFPP( cu.ly(), cu.lheight(), cTarMvField.mv.ver, m_pcEncCfg->m_ifpLines, *cu.cs->pcv ) ) )          
+          )
         {
           uiCostBi = symCost;
           symMode = 1 + curRefList;
@@ -1577,11 +1597,56 @@ bool InterSearch::predInterSearch(CodingUnit& cu, Partitioner& partitioner, doub
       cu.BcwIdx = BCW_DEFAULT; // Reset to default for the Non-NormalMC modes.
     }
     uiHevcCost = (uiCostBi <= uiCost[0] && uiCostBi <= uiCost[1]) ? uiCostBi : ((uiCost[0] <= uiCost[1]) ? uiCost[0] : uiCost[1]);
-
-    if (m_pcEncCfg->m_Affine > 1)
+    if (m_pcEncCfg->m_Affine > 2)
     {
-      checkAffine = m_modeCtrl->comprCUCtx->bestCU ? (checkAffine && m_modeCtrl->comprCUCtx->bestCU->affine) : checkAffine;
       if (cu.slice->TLayer > 3)
+      {
+        checkAffine = false;
+      }
+      else
+      {
+        if( m_pcEncCfg->m_Affine >= 4 && cu.slice->TLayer >= 2 )
+        {
+          checkAffine = m_modeCtrl->comprCUCtx->bestCU ? (checkAffine && m_modeCtrl->comprCUCtx->bestCU->affine) : checkAffine;
+        }
+      }
+    }
+    if( checkAffine && cu.Y().width > 8 && cu.Y().height > 8 && m_pcEncCfg->m_Affine > 0 )
+    {
+      // Based on:
+      // H. Pejman*, S. Coulombe*, C. Vazquez*, M. Jamali° and A. Vakili°
+      // *École de technologie supérieure, °Summit Tech Multimedia
+      // "An Adjustable Fast Decision Method for Affine Motion Estimation in VVC,"
+      // ICIP, Kuala Lumpur, Malaysia, 2023, pp. 2695-2699, doi: 10.1109/ICIP49359.2023.10222750.
+      // https://ieeexplore.ieee.org/document/10222750
+
+      static const double affine_thr_coffs[3] = { 2.534229853866437, 0.05173246 ,0.87650414 };
+      static const double affine_thr_param[5] = { 1, 1, 1, 1.3, 2.3 }; // TODO: Adapt if extending m_Affine range!
+      const int qp         = cu.qp;
+      const int blk_area   = cu.Y().area();
+      const double threshold  = affine_thr_param[m_pcEncCfg->m_Affine - 1];
+
+      //Multiple linear regression (MLR):
+      //Y = b0 + b1*(QP) + b2*(LOG2(BLK_AREA))
+      double log_affine_thr =
+        affine_thr_coffs[0] +
+        qp * affine_thr_coffs[1] +
+        log2(blk_area) * affine_thr_coffs[2];
+
+      //log_affine_thr is LOG 2 of estimated thr
+      double affine_thr = pow(2, log_affine_thr) * threshold;
+
+      double scaled_uiHevcCost = (double)uiHevcCost;
+
+      //The trained coefficients are based on the cost of internal 10 BitDepth. So, the cost should be scaled if the internal BitDepth is not 10.
+      if (m_pcEncCfg->m_internalBitDepth[0] !=10)
+      {
+        //Based on the CTC documnet to convert 8 bit to 10 bit video or vice versa, the VTM only multiply (8 to 10 bits) or divide (10 to 8 bits) pixel values to 4.
+        //In this case, the cost values are approximately scaled by 4.
+        //The trained data acquired from internal 10 bit data. So, if internal bit depth is 8, the conversion into 10-bit cost can be done as follows:
+        scaled_uiHevcCost = uiHevcCost * (pow(2.0, 10-m_pcEncCfg->m_internalBitDepth[0]));
+      }
+      if( scaled_uiHevcCost < affine_thr )
       {
         checkAffine = false;
       }
@@ -1620,7 +1685,7 @@ bool InterSearch::predInterSearch(CodingUnit& cu, Partitioner& partitioner, doub
       {
         storeAffineMotion(cu.mv, cu.refIdx, AFFINEMODEL_4PARAM, BcwIdx);
       }
-      if (cu.slice->sps->AffineType)
+      if (cu.slice->sps->AffineType && uiAffineCost != MAX_DISTORTION)
       {
         if (uiAffineCost < uiHevcCost * 1.05) ///< condition for 6 parameter affine ME
         {
@@ -1760,7 +1825,11 @@ void InterSearch::xEstimateMvPredAMVP( CodingUnit& cu, CPelUnitBuf& origBuf, Ref
   //-- Check Minimum Cost.
   for( i = 0 ; i < pcAMVPInfo->numCand; i++)
   {
-    Distortion uiTmpCost = xGetTemplateCost( cu, origBuf, predBuf, pcAMVPInfo->mvCand[i], i, AMVP_MAX_NUM_CANDS, refPicList, iRefIdx );
+    Mv mvCand = pcAMVPInfo->mvCand[i];
+    if( m_pcEncCfg->m_ifpLines )
+      xClipMvSearch( mvCand, cu.lumaPos(), cu.lumaSize(),*cu.cs->pcv, true );
+
+    Distortion uiTmpCost = xGetTemplateCost( cu, origBuf, predBuf, mvCand, i, AMVP_MAX_NUM_CANDS, refPicList, iRefIdx );
     if( uiBestCost > uiTmpCost )
     {
       uiBestCost  = uiTmpCost;
@@ -1986,13 +2055,13 @@ void InterSearch::xMotionEstimation(CodingUnit& cu, CPelUnitBuf& origBuf, RefPic
 
     Mv bestInitMv = (bBi ? rcMv : rcMvPred);
     Mv cTmpMv     = bestInitMv;
-    clipMv(cTmpMv, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
+    xClipMvSearch(cTmpMv, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv, m_pcEncCfg->m_ifpLines );
     cTmpMv.changePrecision(MV_PRECISION_INTERNAL, MV_PRECISION_INT);
     m_cDistParam.cur.buf = cStruct.piRefY + (cTmpMv.ver * cStruct.iRefStride) + cTmpMv.hor;
     Distortion uiBestSad = m_cDistParam.distFunc(m_cDistParam);
     uiBestSad += m_pcRdCost->getCostOfVectorWithPredictor(cTmpMv.hor, cTmpMv.ver, cStruct.imvShift);
 
-    Mv prevMv[m_BlkUniMvInfoBuffer->m_uniMvListMaxSize];
+    Mv prevMv[BlkUniMvInfoBuffer::m_uniMvListMaxSize];
 
     for( int i = 0; i < m_BlkUniMvInfoBuffer->m_uniMvListSize; i++ )
     {
@@ -2011,7 +2080,7 @@ void InterSearch::xMotionEstimation(CodingUnit& cu, CPelUnitBuf& origBuf, RefPic
       if( j < i )
         continue;
 
-      clipMv(cTmpMv, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
+      xClipMvSearch(cTmpMv, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv, m_pcEncCfg->m_ifpLines);
       cTmpMv.changePrecision(MV_PRECISION_INTERNAL, MV_PRECISION_INT);
       m_cDistParam.cur.buf = cStruct.piRefY + (cTmpMv.ver * cStruct.iRefStride) + cTmpMv.hor;
 
@@ -2067,6 +2136,58 @@ void InterSearch::xMotionEstimation(CodingUnit& cu, CPelUnitBuf& origBuf, RefPic
   DTRACE(g_trace_ctx, D_ME, "   MECost<L%d,%d>: %6d (%d)  MV:%d,%d\n", (int)refPicList, (int)bBi, ruiCost, ruiBits, rcMv.hor << 2, rcMv.ver << 2);
 }
 
+void InterSearch::xClipMvSearch( Mv& rcMv, const Position& pos, const struct Size& size, const PreCalcValues& pcv, const int ifpLines )
+{
+  if( pcv.wrapArround )
+  {
+    return;
+  }
+  int iMvShift = MV_FRACTIONAL_BITS_INTERNAL;
+  int iOffset = 8;
+  int iHorMax = ( pcv.lumaWidth + iOffset - ( int ) pos.x - 1 ) << iMvShift;
+  int iHorMin = ( -( int ) pcv.maxCUSize   - iOffset - ( int ) pos.x + 1 ) * (1 << iMvShift);
+
+  int maxLumaHeight = ifpLines && ((pos.y >> pcv.maxCUSizeLog2) + ifpLines + 1 < pcv.heightInCtus) ? 
+    
+    (((pos.y >> pcv.maxCUSizeLog2) + ifpLines + 1) << pcv.maxCUSizeLog2 ) - size.height - 4  // 4 samples from DCTIF vertical bottom part
+
+    : pcv.lumaHeight + iOffset;
+
+  int iVerMax = ( maxLumaHeight - ( int ) pos.y - 1 ) << iMvShift;
+  int iVerMin = ( -( int ) pcv.maxCUSize   - iOffset - ( int ) pos.y + 1 ) * (1 << iMvShift);
+
+  rcMv.hor = ( std::min( iHorMax, std::max( iHorMin, rcMv.hor ) ) );
+  rcMv.ver = ( std::min( iVerMax, std::max( iVerMin, rcMv.ver ) ) );
+}
+
+void InterSearch::xClipMvToFppLine( Mv& mv, const int yB, const int nH, const int ifpLines, const PreCalcValues& pcv )
+{
+  const int yCompScale = 0;
+  const int mvPrecShift = MV_FRACTIONAL_BITS_INTERNAL;
+  const int ctuLogScale = pcv.maxCUSizeLog2 - yCompScale;
+  const int yRefMax     = ( ( ( yB >> ctuLogScale ) + ifpLines + 1 ) << ctuLogScale ) - 1;
+  const int yRefMv      = yB + nH + ( 4 >> yCompScale ) + (mv.ver >> mvPrecShift) - 1;
+  CHECKD( yRefMv <= yRefMax, "Not expected" );
+  mv.ver -= ( yRefMv - yRefMax ) << mvPrecShift;
+}
+
+void InterSearch::xCheckAndClipMvToFppLine( Mv& mv, const int yB, const int nH, const int ifpLines, const PreCalcValues& pcv )
+{
+  const int yCompScale  = 0;
+  const int mvPrecShift = MV_FRACTIONAL_BITS_INTERNAL;
+  const int ctuLogScale = pcv.maxCUSizeLog2 - yCompScale;
+  const int yBMax       = ( pcv.heightInCtus - 1 - ifpLines ) << ctuLogScale;
+  if( yB < yBMax )
+  {
+    const int yRefMax = ( ( ( yB >> ctuLogScale ) + ifpLines + 1 ) << ctuLogScale ) - 1;
+    const int yRefMv  = yB + nH + ( 4 >> yCompScale ) + (mv.ver >> mvPrecShift) - 1;
+    if( yRefMv > yRefMax )
+    {
+      // clip MV
+      mv.ver -= (yRefMv - yRefMax) << mvPrecShift;
+    }
+  }
+}
 
 void InterSearch::xSetSearchRange ( const CodingUnit& cu,
                                     const Mv& cMvPred,
@@ -2089,7 +2210,7 @@ void InterSearch::xSetSearchRange ( const CodingUnit& cu,
   else
   {
     clipMv( mvTL, cu.lumaPos(), cu.lumaSize(), pcv);
-    clipMv( mvBR, cu.lumaPos(), cu.lumaSize(), pcv);
+    xClipMvSearch( mvBR, cu.lumaPos(), cu.lumaSize(), pcv, m_pcEncCfg->m_ifpLines );
   }
 
   mvTL.divideByPowerOf2( iMvShift );
@@ -2154,7 +2275,7 @@ void InterSearch::xPatternSearchFast( const CodingUnit& cu,
                                       Mv&                   rcMv,
                                       Distortion&           ruiSAD )
 {
-  if( cu.cs->picture->useScME )
+  if( cu.cs->picture->useME )
   {
     switch ( m_motionEstimationSearchMethodSCC )
     {
@@ -2222,8 +2343,7 @@ void InterSearch::xTZSearch( const CodingUnit& cu,
   const bool bNewZeroNeighbourhoodTest               = bExtendedSettings;
 
   int iSearchRange = m_iSearchRange;
-  
-  clipMv( rcMv, cu.lumaPos(), cu.lumaSize(),*cu.cs->pcv );
+  xClipMvSearch( rcMv, cu.lumaPos(), cu.lumaSize(),*cu.cs->pcv, m_pcEncCfg->m_ifpLines );
   rcMv.changePrecision(MV_PRECISION_INTERNAL, MV_PRECISION_QUARTER);
   rcMv.divideByPowerOf2(2);
 
@@ -2251,7 +2371,7 @@ void InterSearch::xTZSearch( const CodingUnit& cu,
     const BlkUniMvInfo* curMvInfo = m_BlkUniMvInfoBuffer->getBlkUniMvInfo(i);
     Mv cTmpMv = curMvInfo->uniMvs[refPicList][iRefIdxPred];
 
-    clipMv(cTmpMv, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
+    xClipMvSearch(cTmpMv, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv, m_pcEncCfg->m_ifpLines);
     cTmpMv.changePrecision(MV_PRECISION_INTERNAL, MV_PRECISION_INT);
     m_cDistParam.cur.buf = cStruct.piRefY + (cTmpMv.ver * cStruct.iRefStride) + cTmpMv.hor;
 
@@ -2513,12 +2633,16 @@ void InterSearch::xPatternSearchIntRefine(CodingUnit& cu, TZSearchStruct&  cStru
       cTestMv[iMVPIdx] += cBaseMvd[iMVPIdx];
       cTestMv[iMVPIdx] += amvpInfo.mvCand[iMVPIdx];
 
+      if( m_pcEncCfg->m_ifpLines && !CU::isMvInRangeFPP( cu.ly(), cu.lheight(), cTestMv[iMVPIdx].ver, m_pcEncCfg->m_ifpLines, *cu.cs->pcv ) )
+      {
+        xClipMvToFppLine( cTestMv[iMVPIdx], cu.ly(), cu.lheight(), m_pcEncCfg->m_ifpLines, *cu.cs->pcv );
+        cTestMv[iMVPIdx].roundTransPrecInternal2AmvrVertical(cu.imv);
+      }
+
       if ( iMVPIdx == 0 || cTestMv[0] != cTestMv[1])
       {
         Mv cTempMV = cTestMv[iMVPIdx];
-        {
-          clipMv(cTempMV, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
-        }
+        clipMv(cTempMV, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
         m_cDistParam.cur.buf = cStruct.piRefY  + cStruct.iRefStride * (cTempMV.ver >>  MV_FRACTIONAL_BITS_INTERNAL) + (cTempMV.hor >> MV_FRACTIONAL_BITS_INTERNAL);
         uiDist = uiSATD = (Distortion) (m_cDistParam.distFunc( m_cDistParam ) * fWeight);
       }
@@ -2722,6 +2846,10 @@ Distortion InterSearch::xSymRefineMvSearch( CodingUnit& cu, CPelUnitBuf& origBuf
       mvOffset <<= nSearchStepShift;
       MvField mvCand = mvCurCenter, mvPair;
       mvCand.mv += mvOffset;
+      if( m_pcEncCfg->m_ifpLines && !CU::isMvInRangeFPP( cu.ly(), cu.lheight(), mvCand.mv.ver, m_pcEncCfg->m_ifpLines, *cu.cs->pcv ) )
+      {
+        continue; // Skip this pos
+      }
 
       // get MVD cost
       Mv pred = rcMvCurPred;
@@ -2736,6 +2864,12 @@ Distortion InterSearch::xSymRefineMvSearch( CodingUnit& cu, CPelUnitBuf& origBuf
       // get MVD pair and set target MV
       mvPair.refIdx = rTarMvField.refIdx;
       mvPair.mv.set( rcMvTarPred.hor - (mvCand.mv.hor - rcMvCurPred.hor), rcMvTarPred.ver - (mvCand.mv.ver - rcMvCurPred.ver) );
+
+      if( m_pcEncCfg->m_ifpLines && !CU::isMvInRangeFPP( cu.ly(), cu.lheight(), mvPair.mv.ver, m_pcEncCfg->m_ifpLines, *cu.cs->pcv ) )
+      {
+        continue; // Skip this pos
+      }
+
       uiCost += xGetSymCost( cu, origBuf, refPicList, mvCand, mvPair, BcwIdx );
       if ( uiCost < uiMinCost )
       {
@@ -3402,7 +3536,7 @@ void InterSearch::xEstimateInterResidualQT(CodingStructure &cs, Partitioner &par
   const uint32_t numTBlocks    = getNumberValidTBlocks   ( *cs.pcv );
   CodingUnit& cu               = *cs.getCU(partitioner.chType, partitioner.treeType);
   const unsigned currDepth = partitioner.currTrDepth;
-  const bool useTS = cs.picture->useScTS;
+  const bool useTS = cs.picture->useTS;
 
   bool bCheckFull  = !partitioner.canSplit( TU_MAX_TR_SPLIT, cs );
   if( cu.sbtInfo && partitioner.canSplit( CU::getSbtTuSplit( cu.sbtInfo ), cs ) )
@@ -4341,7 +4475,7 @@ void InterSearch::xSymMvdCheckBestMvp(
   PelUnitBuf predBufA = m_tmpPredStorage[curRefList].getCompactBuf( cu );
   const Picture* picRefA = cu.slice->getRefPic(curRefList, cCurMvField.refIdx);
   Mv mvA = cCurMvField.mv;
-  clipMv( mvA, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv );
+  xClipMvSearch( mvA, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv, m_ifpLines );
   xPredInterBlk( COMP_Y, cu, picRefA, mvA, predBufA, false, cu.slice->clpRngs[ COMP_Y ], false, false );
 
   bufTmp = m_tmpStorageLCU.getBuf( UnitAreaRelative( cu, cu ) );
@@ -4367,7 +4501,7 @@ void InterSearch::xSymMvdCheckBestMvp(
       PelUnitBuf predBufB = m_tmpPredStorage[tarRefList].getCompactBuf( cu );
       const Picture* picRefB = cu.slice->getRefPic(tarRefList, cTarMvField.refIdx);
       Mv mvB = cTarMvField.mv;
-      clipMv( mvB, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv );
+      xClipMvSearch( mvB, cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv, m_ifpLines );
       xPredInterBlk( COMP_Y, cu, picRefB, mvB, predBufB, false, cu.slice->clpRngs[ COMP_Y ], false, false );
 
       // calc distortion
@@ -4536,7 +4670,10 @@ void InterSearch::xPredAffineInterSearch( CodingUnit& cu,
       }
 
       // Do Affine AMVP
-      xEstimateAffineAMVP(cu, affiAMVPInfoTemp[refPicList], origBuf, refPicList, iRefIdxTemp, cMvPred[iRefList][iRefIdxTemp], biPDistTemp);
+      bool foundPred = xEstimateAffineAMVP(cu, affiAMVPInfoTemp[refPicList], origBuf, refPicList, iRefIdxTemp, cMvPred[iRefList][iRefIdxTemp], biPDistTemp);
+      if( !foundPred )
+        return;
+
       if (affineAmvrEnabled)
       {
         biPDistTemp += m_pcRdCost->getCost(xCalcAffineMVBits(cu, cMvPred[iRefList][iRefIdxTemp], cMvPred[iRefList][iRefIdxTemp]));
@@ -4811,27 +4948,37 @@ void InterSearch::xPredAffineInterSearch( CodingUnit& cu,
       ::memcpy(tmp.affMVs[1][bestBiPRefIdxL1], pcMvTemp, sizeof(Mv) * 3);
       iRefIdxBi[1] = bestBiPRefIdxL1;
 
-      // Get list1 prediction block
-      CU::setAllAffineMv(cu, cMvBi[1][0], cMvBi[1][1], cMvBi[1][2], REF_PIC_LIST_1);
-      cu.refIdx[REF_PIC_LIST_1] = iRefIdxBi[1];
-
-      PelUnitBuf predBufTmp = m_tmpPredStorage[REF_PIC_LIST_1].getCompactBuf( cu );
-      motionCompensation(cu, predBufTmp, REF_PIC_LIST_1);
-
-      // Update bits
-      uiMotBits[0] = uiBits[0] - uiMbBits[0];
-      uiMotBits[1] = uiMbBits[1];
-
-      if (slice.numRefIdx[REF_PIC_LIST_1] > 1)
+      if( m_pcEncCfg->m_ifpLines && !xIsAffineMvInRangeFPP( cu, pcMvTemp, m_pcEncCfg->m_ifpLines ) )
       {
-        uiMotBits[1] += bestBiPRefIdxL1 + 1;
-        if (bestBiPRefIdxL1 == slice.numRefIdx[REF_PIC_LIST_1] - 1)
-        {
-          uiMotBits[1]--;
-        }
+        // this mvp cannot be used for mv, skip Bi-pred
+        uiCostBi = MAX_DISTORTION;
+        doBiPred = false;
       }
-      uiMotBits[1] += m_auiMVPIdxCost[aaiMvpIdxBi[1][bestBiPRefIdxL1]][AMVP_MAX_NUM_CANDS];
-      uiBits[2] = uiMbBits[2] + uiMotBits[0] + uiMotBits[1];
+      else
+      {
+
+        // Get list1 prediction block
+        CU::setAllAffineMv(cu, cMvBi[1][0], cMvBi[1][1], cMvBi[1][2], REF_PIC_LIST_1);
+        cu.refIdx[REF_PIC_LIST_1] = iRefIdxBi[1];
+
+        PelUnitBuf predBufTmp = m_tmpPredStorage[REF_PIC_LIST_1].getCompactBuf( cu );
+        motionCompensation(cu, predBufTmp, REF_PIC_LIST_1);
+
+        // Update bits
+        uiMotBits[0] = uiBits[0] - uiMbBits[0];
+        uiMotBits[1] = uiMbBits[1];
+
+        if (slice.numRefIdx[REF_PIC_LIST_1] > 1)
+        {
+          uiMotBits[1] += bestBiPRefIdxL1 + 1;
+          if (bestBiPRefIdxL1 == slice.numRefIdx[REF_PIC_LIST_1] - 1)
+          {
+            uiMotBits[1]--;
+          }
+        }
+        uiMotBits[1] += m_auiMVPIdxCost[aaiMvpIdxBi[1][bestBiPRefIdxL1]][AMVP_MAX_NUM_CANDS];
+        uiBits[2] = uiMbBits[2] + uiMotBits[0] + uiMotBits[1];
+      }
     }
     else
     {
@@ -4873,6 +5020,11 @@ void InterSearch::xPredAffineInterSearch( CodingUnit& cu,
         // First iterate, get prediction block of opposite direction
         if (iIter == 0 && !slice.picHeader->mvdL1Zero)
         {
+          if( m_pcEncCfg->m_ifpLines && !xIsAffineMvInRangeFPP( cu, aacMv[1 - iRefList], m_pcEncCfg->m_ifpLines ) )
+          {
+            continue;
+          }
+
           CU::setAllAffineMv(cu, aacMv[1 - iRefList][0], aacMv[1 - iRefList][1], aacMv[1 - iRefList][2], RefPicList(1 - iRefList));
           cu.refIdx[1 - iRefList] = iRefIdx[1 - iRefList];
 
@@ -5073,6 +5225,12 @@ Distortion InterSearch::xGetAffineTemplateCost(CodingUnit& cu, CPelUnitBuf& orig
   // prediction pattern
   Mv mv[3];
   memcpy(mv, acMvCand, sizeof(mv));
+
+  if( m_pcEncCfg->m_ifpLines && !xIsAffineMvInRangeFPP( cu, mv, m_pcEncCfg->m_ifpLines ) )
+  {
+    return MAX_DISTORTION>>1;  
+  }
+
   xPredAffineBlk(COMP_Y, cu, picRef, mv, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
 
   // calc distortion
@@ -5271,7 +5429,7 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
 
   int64_t  i64EqualCoeff[7][7];
   Pel    *piError = m_tmpAffiError;
-  int    *pdDerivate[2];
+  Pel    *pdDerivate[2];
   pdDerivate[0] = m_tmpAffiDeri[0];
   pdDerivate[1] = m_tmpAffiDeri[1];
 
@@ -5293,24 +5451,25 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
   {
     acMvTemp[2].roundAffinePrecInternal2Amvr(cu.imv);
   }
-  xPredAffineBlk(COMP_Y, cu, refPic, acMvTemp, predBuf, false, cu.cs->slice->clpRngs[COMP_Y], refPicList);
+  if( !m_pcEncCfg->m_ifpLines || xIsAffineMvInRangeFPP( cu, acMvTemp, m_pcEncCfg->m_ifpLines ) )
+  {
+    xPredAffineBlk(COMP_Y, cu, refPic, acMvTemp, predBuf, false, cu.cs->slice->clpRngs[COMP_Y], refPicList);
 
-  // get error
-  uiCostBest = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
+    // get error
+    uiCostBest = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
 
-  // get cost with mv
-  m_pcRdCost->setCostScale(0);
-  uiBitsBest = ruiBits;
-  DTRACE(g_trace_ctx, D_COMMON, " (%d) xx uiBitsBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest);
-  uiBitsBest += xCalcAffineMVBits(cu, acMvTemp, acMvPred);
-  DTRACE(g_trace_ctx, D_COMMON, " (%d) yy uiBitsBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest);
-  uiCostBest = (Distortion)(floor(fWeight * (double)uiCostBest) + (double)m_pcRdCost->getCost(uiBitsBest));
+    // get cost with mv
+    m_pcRdCost->setCostScale(0);
+    uiBitsBest = ruiBits;
+    DTRACE(g_trace_ctx, D_COMMON, " (%d) xx uiBitsBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest);
+    uiBitsBest += xCalcAffineMVBits(cu, acMvTemp, acMvPred);
+    DTRACE(g_trace_ctx, D_COMMON, " (%d) yy uiBitsBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest);
+    uiCostBest = (Distortion)(floor(fWeight * (double)uiCostBest) + (double)m_pcRdCost->getCost(uiBitsBest));
 
-  DTRACE(g_trace_ctx, D_COMMON, " (%d) uiBitsBest=%d, uiCostBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest, uiCostBest);
+    DTRACE(g_trace_ctx, D_COMMON, " (%d) uiBitsBest=%d, uiCostBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest, uiCostBest);
 
-  ::memcpy(acMv, acMvTemp, sizeof(Mv) * 3);
-
-  const int bufStride = pBuf->Y().stride;
+    ::memcpy(acMv, acMvTemp, sizeof(Mv) * 3);
+  }
   const int predBufStride = predBuf.Y().stride;
   Mv prevIterMv[7][3];
   int iIterTime;
@@ -5335,23 +5494,13 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
     *                         use gradient to update mv
     *********************************************************************************/
     // get Error Matrix
-    const Pel* pOrg = pBuf->Y().buf;
-    Pel* pPred = predBuf.Y().buf;
-    for (int j = 0; j< height; j++)
-    {
-      for (int i = 0; i< width; i++)
-      {
-        piError[i + j * width] = pOrg[i] - pPred[i];
-      }
-      pOrg += bufStride;
-      pPred += predBufStride;
-    }
+    PelBuf( piError, width, height ).subtract( pBuf->Y(), predBuf.Y() );
 
     // sobel x direction
     // -1 0 1
     // -2 0 2
     // -1 0 1
-    pPred = predBuf.Y().buf;
+    Pel* pPred = predBuf.Y().buf;
     m_HorizontalSobelFilter(pPred, predBufStride, pdDerivate[0], width, width, height);
 
     // sobel y direction
@@ -5366,9 +5515,7 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
       memset(&i64EqualCoeff[row][0], 0, iParaNum * sizeof(int64_t));
     }
 
-    m_EqualCoeffComputer(piError, width, pdDerivate, width, i64EqualCoeff, width, height
-      , (cu.affineType == AFFINEMODEL_6PARAM)
-    );
+    m_EqualCoeffComputer[cu.affineType]( piError, width, pdDerivate, width, width, height, i64EqualCoeff );
 
     for (int row = 0; row < iParaNum; row++)
     {
@@ -5442,48 +5589,54 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
       clipMv(acMvTemp[i], cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
     }
 
-    xPredAffineBlk(COMP_Y, cu, refPic, acMvTemp, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
-
-    // get error
-    Distortion uiCostTemp = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
-    DTRACE(g_trace_ctx, D_COMMON, " (%d) uiCostTemp=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiCostTemp);
-
-    // get cost with mv
-    m_pcRdCost->setCostScale(0);
-    uint32_t uiBitsTemp = ruiBits;
-    uiBitsTemp += xCalcAffineMVBits(cu, acMvTemp, acMvPred);
-    uiCostTemp = (Distortion)(floor(fWeight * (double)uiCostTemp) + (double)m_pcRdCost->getCost(uiBitsTemp));
-
-    // store best cost and mv
-    if (uiCostTemp < uiCostBest)
+    if( !m_pcEncCfg->m_ifpLines || xIsAffineMvInRangeFPP( cu, acMvTemp, m_pcEncCfg->m_ifpLines ) )
     {
-      uiCostBest = uiCostTemp;
-      uiBitsBest = uiBitsTemp;
-      memcpy(acMv, acMvTemp, sizeof(Mv) * 3);
-      mvpIdx = bestMvpIdx;
-    }
-    else if(m_pcEncCfg->m_Affine > 1)
-    {
-      break;
+      xPredAffineBlk(COMP_Y, cu, refPic, acMvTemp, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
+
+      // get error
+      Distortion uiCostTemp = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
+      DTRACE(g_trace_ctx, D_COMMON, " (%d) uiCostTemp=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiCostTemp);
+
+      // get cost with mv
+      m_pcRdCost->setCostScale(0);
+      uint32_t uiBitsTemp = ruiBits;
+      uiBitsTemp += xCalcAffineMVBits(cu, acMvTemp, acMvPred);
+      uiCostTemp = (Distortion)(floor(fWeight * (double)uiCostTemp) + (double)m_pcRdCost->getCost(uiBitsTemp));
+
+      // store best cost and mv
+      if (uiCostTemp < uiCostBest)
+      {
+        uiCostBest = uiCostTemp;
+        uiBitsBest = uiBitsTemp;
+        memcpy(acMv, acMvTemp, sizeof(Mv) * 3);
+        mvpIdx = bestMvpIdx;
+      }
+      else if(m_pcEncCfg->m_Affine > 1)
+      {
+        break;
+      }
     }
   }
 
   auto checkCPMVRdCost = [&](Mv ctrlPtMv[3])
   {
-    xPredAffineBlk(COMP_Y, cu, refPic, ctrlPtMv, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
-    // get error
-    Distortion costTemp = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
-    // get cost with mv
-    m_pcRdCost->setCostScale(0);
-    uint32_t bitsTemp = ruiBits;
-    bitsTemp += xCalcAffineMVBits(cu, ctrlPtMv, acMvPred);
-    costTemp = (Distortion)(floor(fWeight * (double)costTemp) + (double)m_pcRdCost->getCost(bitsTemp));
-    // store best cost and mv
-    if (costTemp < uiCostBest)
+    if( !m_pcEncCfg->m_ifpLines || xIsAffineMvInRangeFPP( cu, ctrlPtMv, m_pcEncCfg->m_ifpLines ) )
     {
-      uiCostBest = costTemp;
-      uiBitsBest = bitsTemp;
-      ::memcpy(acMv, ctrlPtMv, sizeof(Mv) * 3);
+      xPredAffineBlk(COMP_Y, cu, refPic, ctrlPtMv, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
+      // get error
+      Distortion costTemp = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
+      // get cost with mv
+      m_pcRdCost->setCostScale(0);
+      uint32_t bitsTemp = ruiBits;
+      bitsTemp += xCalcAffineMVBits(cu, ctrlPtMv, acMvPred);
+      costTemp = (Distortion)(floor(fWeight * (double)costTemp) + (double)m_pcRdCost->getCost(bitsTemp));
+      // store best cost and mv
+      if (costTemp < uiCostBest)
+      {
+        uiCostBest = costTemp;
+        uiBitsBest = bitsTemp;
+        ::memcpy(acMv, ctrlPtMv, sizeof(Mv) * 3);
+      }
     }
   };
 
@@ -5559,20 +5712,24 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
           {
             acMvTemp[j].set(centerMv[j].hor + (testPos[i][0] * (1 << mvShift)), centerMv[j].ver + (testPos[i][1] * (1 << mvShift)));
             clipMv(acMvTemp[j], cu.lumaPos(), cu.lumaSize(), *cu.cs->pcv);
-            xPredAffineBlk(COMP_Y, cu, refPic, acMvTemp, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
 
-            Distortion costTemp = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
-            uint32_t bitsTemp = ruiBits;
-            bitsTemp += xCalcAffineMVBits(cu, acMvTemp, acMvPred);
-            costTemp = (Distortion)(floor(fWeight * (double)costTemp) + (double)m_pcRdCost->getCost(bitsTemp));
-
-            if (costTemp < uiCostBest)
+            if( !m_pcEncCfg->m_ifpLines || xIsAffineMvInRangeFPP( cu, acMvTemp, m_pcEncCfg->m_ifpLines ) )
             {
-              uiCostBest = costTemp;
-              uiBitsBest = bitsTemp;
-              ::memcpy(acMv, acMvTemp, sizeof(Mv) * 3);
-              modelChange = true;
-              loopChange = true;
+              xPredAffineBlk(COMP_Y, cu, refPic, acMvTemp, predBuf, false, cu.slice->clpRngs[COMP_Y], refPicList);
+
+              Distortion costTemp = m_pcRdCost->getDistPart(predBuf.Y(), pBuf->Y(), cu.cs->sps->bitDepths[CH_L], COMP_Y, DF_HAD);
+              uint32_t bitsTemp = ruiBits;
+              bitsTemp += xCalcAffineMVBits(cu, acMvTemp, acMvPred);
+              costTemp = (Distortion)(floor(fWeight * (double)costTemp) + (double)m_pcRdCost->getCost(bitsTemp));
+
+              if (costTemp < uiCostBest)
+              {
+                uiCostBest = costTemp;
+                uiBitsBest = bitsTemp;
+                ::memcpy(acMv, acMvTemp, sizeof(Mv) * 3);
+                modelChange = true;
+                loopChange = true;
+              }
             }
           }
         }
@@ -5598,7 +5755,7 @@ void InterSearch::xAffineMotionEstimation(CodingUnit& cu,
   DTRACE(g_trace_ctx, D_COMMON, " (%d) uiBitsBest=%d, uiCostBest=%d\n", DTRACE_GET_COUNTER(g_trace_ctx, D_COMMON), uiBitsBest, uiCostBest);
 }
 
-void InterSearch::xEstimateAffineAMVP(CodingUnit& cu, AffineAMVPInfo& affineAMVPInfo, CPelUnitBuf& origBuf, RefPicList refPicList, int iRefIdx, Mv acMvPred[3], Distortion& distBiP)
+bool InterSearch::xEstimateAffineAMVP(CodingUnit& cu, AffineAMVPInfo& affineAMVPInfo, CPelUnitBuf& origBuf, RefPicList refPicList, int iRefIdx, Mv acMvPred[3], Distortion& distBiP)
 {
   Mv         bestMvLT, bestMvRT, bestMvLB;
   int        iBestIdx = 0;
@@ -5620,7 +5777,7 @@ void InterSearch::xEstimateAffineAMVP(CodingUnit& cu, AffineAMVPInfo& affineAMVP
   }
 
   // initialize Mvp index & Mvp
-  iBestIdx = 0;
+  iBestIdx = -1;
   for (int i = 0; i < affineAMVPInfo.numCand; i++)
   {
     if (i && stop_check)
@@ -5628,7 +5785,6 @@ void InterSearch::xEstimateAffineAMVP(CodingUnit& cu, AffineAMVPInfo& affineAMVP
       continue;
     }
     Mv mv[3] = { affineAMVPInfo.mvCandLT[i], affineAMVPInfo.mvCandRT[i], affineAMVPInfo.mvCandLB[i] };
-
     Distortion uiTmpCost = xGetAffineTemplateCost(cu, origBuf, predBuf, mv, i, AMVP_MAX_NUM_CANDS, refPicList, iRefIdx);
 
     if (uiBestCost > uiTmpCost)
@@ -5642,6 +5798,9 @@ void InterSearch::xEstimateAffineAMVP(CodingUnit& cu, AffineAMVPInfo& affineAMVP
     }
   }
 
+  if( iBestIdx < 0 )
+    return false;
+
   // Setting Best MVP
   acMvPred[0] = bestMvLT;
   acMvPred[1] = bestMvRT;
@@ -5650,6 +5809,7 @@ void InterSearch::xEstimateAffineAMVP(CodingUnit& cu, AffineAMVPInfo& affineAMVP
   cu.mvpIdx[refPicList] = iBestIdx;
   cu.mvpNum[refPicList] = affineAMVPInfo.numCand;
   DTRACE(g_trace_ctx, D_COMMON, "#estAffi=%d \n", affineAMVPInfo.numCand);
+  return true;
 }
 
 void InterSearch::xCopyAffineAMVPInfo(AffineAMVPInfo& src, AffineAMVPInfo& dst)
@@ -6410,8 +6570,7 @@ bool InterSearch::predIBCSearch(CodingUnit& cu, Partitioner& partitioner)
 
   }
 
-  cu.bv = cMv; // bv is always at integer accuracy
-  cMv.changePrecision(MV_PRECISION_INT, MV_PRECISION_INTERNAL);
+  cMv.changePrecision( MV_PRECISION_INT, MV_PRECISION_INTERNAL );
   cu.mv[REF_PIC_LIST_0][0] = cMv; // store in fractional pel accuracy
 
   cu.mvpIdx[REF_PIC_LIST_0] = bvpIdxBest;
