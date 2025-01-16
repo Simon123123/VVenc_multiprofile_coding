@@ -18,8 +18,8 @@ args = parser.parse_args()
 
 cushape_dep = np.load(args.dep)
 
-cushape_ref = np.load(args.ref)
 
+cushape_ref = np.load(args.ref)
 
         
 width_comp = (cushape_dep[:, :, :, 0, :, :] <=  cushape_ref[:, :, :, 0, :, :])
@@ -29,4 +29,4 @@ height_comp = (cushape_dep[:, :, :, 1, :, :] <=  cushape_ref[:, :, :, 1, :, :])
 proportion = np.sum(width_comp & height_comp) / (cushape_dep.size / 2) * 100
 
         
-print('{:.2f}'.format(proportion))		
+print('The percentage of the frame area encoded with CU widths and heights smaller than those in the reference encodings is: {:.2f}'.format(proportion))		

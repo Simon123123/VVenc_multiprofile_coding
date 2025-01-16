@@ -107,8 +107,8 @@ def main(argv):
                     cushape_map[ind_poc, ind_h, ind_w, 0, ref_y_mt + j, ref_x_mt + i] = r[3] 
                     cushape_map[ind_poc, ind_h, ind_w, 1, ref_y_mt + j, ref_x_mt + i] = r[4]
                     
+        np.save(os.path.join(path, 'ShapeNpy_' + filename.replace("CUshape_", "")), cushape_map)
 
- 
         cushape_map = cushape_map.reshape(-1, size_mt * size_mt)
         np.savetxt(os.path.join(path, 'ShapeMap_' + filename.replace("CUshape_", "") + '.csv'), cushape_map, fmt='%d', delimiter=';')
         
